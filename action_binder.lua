@@ -7,11 +7,12 @@ local kebab_casify = require('libs/kebab_casify')
 local crossbar_abilities = require('resources/crossbar_abilities')
 local crossbar_spells = require('resources/crossbar_spells')
 local player_data = require('player')
-
 texts = require('texts')
-
+local defaults = require('defaults')
+settings = config.load(defaults)
 local action_binder = {}
-
+local theme = require('theme')
+local theme_options = theme.apply(settings)
 local icon_pack = nil
 
 local get_icon_pathbase = function()
@@ -107,7 +108,8 @@ local action_types = {
     ['CREATE_CUSTOM_ACTION'] = 37,
     ['EDIT_CUSTOM_ACTION'] = 38,
     ['DELETE_CUSTOM_ACTION'] = 39,
-    ['QUICK_SWITCH_CROSSBARS'] = 40
+    ['QUICK_SWITCH_CROSSBARS'] = 40,
+    ['GS_MACRO'] = 41,
 }
 
 local prefix_lookup = {
@@ -149,7 +151,8 @@ local prefix_lookup = {
     [action_types.CREATE_CUSTOM_ACTION] = '', -- meta action, writes to CustomActions.xml not a slot
     [action_types.EDIT_CUSTOM_ACTION]   = '', -- meta action, edits CustomActions.xml entries
     [action_types.DELETE_CUSTOM_ACTION] = '', -- meta action, removes a CustomActions.xml entry
-    [action_types.QUICK_SWITCH_CROSSBARS] = 'switch' -- temp-switch to another set; auto-reverts after one action
+    [action_types.QUICK_SWITCH_CROSSBARS] = 'switch', -- temp-switch to another set; auto-reverts after one action
+    [action_types.GS_MACRO] = 'gs',
 }
 
 -- Reverse-display lookup for stored linked_type prefixes. Used by the Edit
@@ -212,8 +215,8 @@ function action_binder:setup(buttonmapping, save_binding_func, delete_binding_fu
     self.title = self:create_text('Select Action Type', base_x + 50, base_y + 30)
     self.title:size(18)
     self.title:hide()
-    self.base_x = base_x or 150
-    self.base_y = base_y or 150
+    self.base_x = settings.Style.OffsetX or offset_x or base_x or 150
+    self.base_y = settings.Style.OffsetY or  offset_y or base_y or 150
     self.width =  max_width or (windower.get_windower_settings().ui_x_res - 300)
     self.height = max_height or (windower.get_windower_settings().ui_y_res - 300)
     self.state = states.HIDDEN
@@ -252,6 +255,7 @@ function action_binder:setup(buttonmapping, save_binding_func, delete_binding_fu
     windower.prim.set_position('button_entry_bg', self.base_x + 150, self.base_y + 150)
     windower.prim.set_size('button_entry_bg', self.width - 300, self.height - 300)
     windower.prim.set_visibility('button_entry_bg', false)
+    self:reload()
 end
 
 function action_binder:reset_state()
@@ -2202,7 +2206,6 @@ function action_binder:display_rune_enchantment_selector()
 
             ability_list:append({id = id, name = name, icon = icon_path, icon_offset = icon_offset, data = {target_type = target_type}})
         end
-        ability_list:append({id = id, name = name, icon = icon_path, data = {target_type = target_type}})
     end
 
     self.selector:display_options(ability_list)
@@ -3585,6 +3588,10 @@ windower.register_event('mouse', function(type, x, y, delta, blocked)
         end
     end
 end)
+
+function action_binder:reload()
+    self:set_ui_offset_callback(settings.Style.OffsetX, settings.Style.OffsetY)
+end
 
 -- HELPER FUNCTIONS
 function sortByName(a, b)

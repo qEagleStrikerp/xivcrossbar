@@ -1,4 +1,6 @@
 local env_chooser = {}
+local defaults = require('defaults')
+settings = config.load(defaults)
 
 local text_setup = {
     flags = {

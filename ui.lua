@@ -3,6 +3,7 @@ local kebab_casify = require('libs/kebab_casify')
 local crossbar_abilities = require('resources/crossbar_abilities')
 local crossbar_spells = require('resources/crossbar_spells')
 local defaults = require('defaults')
+settings = config.load(defaults)
 local player = require('player')
 
 local ui = {}
@@ -312,7 +313,7 @@ function ui:setup(theme_options, enchanted_items)
 
     self:setup_metrics(theme_options)
     self:load(theme_options)
-
+    self.hotbar_width = (400 + theme_options.slot_spacing * 9)
     self.is_setup = true
 end
 
@@ -474,13 +475,14 @@ function ui:load(theme_options)
     self.feedback.speed = theme_options.feedback_speed
     self.feedback.current_opacity = self.feedback.max_opacity
     self.feedback_icon:hide()
+    ui:update_offsets(settings.Style.OffsetX, settings.Style.OffsetY)
 end
 
 -- setup positions and dimensions for ui
 function ui:setup_metrics(theme_options)
     self.hotbar_width = (400 + theme_options.slot_spacing * 9)
-    self.pos_x = (windower.get_windower_settings().ui_x_res / 2) - (self.hotbar_width / 2) + theme_options.offset_x
-    self.pos_y = (windower.get_windower_settings().ui_y_res - 120) + theme_options.offset_y
+    self.pos_x = (windower.get_windower_settings().ui_x_res / 2) - (self.hotbar_width / 2)
+    self.pos_y = (windower.get_windower_settings().ui_y_res - 120)
 
     self.slot_spacing = theme_options.slot_spacing
 
@@ -493,8 +495,8 @@ function ui:setup_metrics(theme_options)
 end
 
 function ui:update_offsets(offset_x, offset_y)
-    self.pos_x = (windower.get_windower_settings().ui_x_res / 2) - (self.hotbar_width / 2) + offset_x
-    self.pos_y = (windower.get_windower_settings().ui_y_res - 120) + offset_y
+    self.pos_x = (windower.get_windower_settings().ui_x_res / 2 - 240) + settings.Style.OffsetX + offset_x
+    self.pos_y = (windower.get_windower_settings().ui_y_res - 120) + settings.Style.OffsetY + offset_y
 
     for h=1,self.theme.hotbar_number,1 do
         for i=1,8,1 do
@@ -744,7 +746,12 @@ function ui:load_action(player_hotbar, environment, hotbar, slot, action, player
                 -- display mp cost
                 if crossbar_action.mp_cost ~= nil and crossbar_action.mp_cost ~= 0 then
                     self.hotbars[hotbar].slot_cost[slot]:color(self.theme.mp_cost_color_red, self.theme.mp_cost_color_green, self.theme.mp_cost_color_blue)
-                    self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.mp_cost))
+                    
+                    if(settings.Hotbar.HideActionCost == true) then
+                        self.hotbars[hotbar].slot_cost[slot]:text("")
+                    else    
+                        self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.mp_cost))
+                    end
 
                     if player_vitals.mp < crossbar_action.mp_cost then
                         self.disabled_slots.no_vitals[action.action] = true
@@ -753,7 +760,12 @@ function ui:load_action(player_hotbar, environment, hotbar, slot, action, player
                 -- display tp cost
                 elseif crossbar_action.tp_cost ~= nil and crossbar_action.tp_cost ~= 0 then
                     self.hotbars[hotbar].slot_cost[slot]:color(self.theme.tp_cost_color_red, self.theme.tp_cost_color_green, self.theme.tp_cost_color_blue)
-                    self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.tp_cost))
+
+                    if(settings.Hotbar.HideActionCost == true) then
+                        self.hotbars[hotbar].slot_cost[slot]:text("")
+                    else
+                        self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.tp_cost))
+                    end
 
                     if player_vitals.tp < crossbar_action.tp_cost then
                         self.disabled_slots.no_vitals[action.action] = true

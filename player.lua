@@ -3,6 +3,7 @@ local storage = require('storage')
 local action_manager = require('action_manager')
 local mount_roulette = require('libs/mountroulette/mountroulette')
 
+settings = config.load(defaults)
 local player = {}
 
 player.name = ''
@@ -37,14 +38,10 @@ function player:initialize(windower_player, server, theme_options, enchanted_ite
     self.server = server
     self.id = windower_player.id
     self.enchanted_items = enchanted_items
-
     self.hotbar_settings.max = theme_options.hotbar_number
-
     self.vitals.mp = windower_player.vitals.mp
     self.vitals.tp = windower_player.vitals.tp
-
     self.sch_jp_spent = windower_player.job_points.sch.jp_spent
-
     self.auto_create_xml = theme_options.AutoCreateXML
 
     storage:setup(self)
@@ -237,7 +234,11 @@ function player:load_from_file(storage_file)
                             end
 
                         elseif tag.name == 'alias' then
-                            new_action.alias = tag.children[1].value
+                            if (settings.Hotbar.HideActionName == true) then
+                                new_action.alias = ' '
+                            else
+                                new_action.alias = tag.children[1].value
+                            end
                         elseif tag.name == 'icon' then
                             new_action.icon = tag.children[1].value
                         elseif tag.name == 'equip_slot' then
@@ -632,6 +633,22 @@ function player:dispatch_action(action)
         end
 
         windower.send_command('input ' .. command)
+        return
+    end
+
+    if action.type == 'gs' then
+        local command = 'gs equip '
+
+        if  action.target ~= nil then
+            command = command .. action.action
+        end
+        windower.send_command(command)
+        return
+    end
+    if action.type == 'gsc' then
+        local command = 'gs c cycle '
+        command = command .. action.action
+        windower.send_command(command)
         return
     end
 

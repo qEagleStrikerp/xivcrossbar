@@ -1,6 +1,7 @@
 -- Addon description
 _addon.name = 'XIVCrossbar' -- based on Edeon's XIV Hotbar
-_addon.author = 'Aliekber, Aeliya, GrayFox2510'
+_addon.author = 'Aliekber, various friendly neighborhood modders'
+-- Credit goes to: Aeliya, BlueSummersC, GrayFox2510, qEagleStrikerp, XerevNonori
 _addon.version = '0.3'
 _addon.language = 'english'
 _addon.commands = {'xivcrossbar', 'xb', 'xcb'}

@@ -672,9 +672,17 @@ function player:dispatch_action(action)
         target_string = '" <' .. action.target .. '>'
     end
 
-    if action.type == 'mount' and action.action == 'Mount Roulette' then
-        mount_roulette:ride_random_mount()
-        return
+    if action.type == 'mount' then
+        if is_player_mounted() then
+            windower.send_command('input /dismount')
+            return
+        elseif action.action == 'Mount Roulette' then
+            mount_roulette:ride_random_mount()
+            return
+        elseif action.action ~= 'Mount Roulette' then
+            windower.send_command('input /' .. action.type .. ' "' .. action.action .. '"' .. target_string)
+            return
+        end
     elseif (action.type == 'ta' and action.action == 'Switch Target' and action.alias == 'Switch Target') then
         if (self.in_battle) then
             windower.send_command('input /a ' .. target_string)
@@ -765,6 +773,20 @@ function player:create_new_environment(name)
     else
         print('XIVCROSSBAR: Attempted to create crossbar set with no name. Unable to create.')
     end
+end
+
+function get_player_buffs()
+    return T(windower.ffxi.get_player().buffs)
+end
+
+function is_player_mounted()
+    local _player = windower.ffxi.get_player()
+
+    if _player then
+        return _player.status == 85 or _player.status == 5 or get_player_buffs():contains(252)
+    end
+
+    return false
 end
 
 -- save current hotbar

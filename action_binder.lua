@@ -65,6 +65,8 @@ local states = {
     ['EDIT_CUSTOM_ACTION_REVIEW'] = 17,
     ['DELETE_CUSTOM_ACTION_PICK'] = 18,
     ['DELETE_CUSTOM_ACTION_CONFIRM'] = 19,
+    ['ENTER_SET_NAME'] = 20,
+    ['ENTER_SET_ALIAS'] = 21,
 }
 
 local action_types = {
@@ -110,6 +112,7 @@ local action_types = {
     ['DELETE_CUSTOM_ACTION'] = 39,
     ['QUICK_SWITCH_CROSSBARS'] = 40,
     ['GS_MACRO'] = 41,
+    ['CREATE_NEW_SET'] = 42,
 }
 
 local prefix_lookup = {
@@ -153,6 +156,7 @@ local prefix_lookup = {
     [action_types.DELETE_CUSTOM_ACTION] = '', -- meta action, removes a CustomActions.xml entry
     [action_types.QUICK_SWITCH_CROSSBARS] = 'switch', -- temp-switch to another set; auto-reverts after one action
     [action_types.GS_MACRO] = 'gs',
+    [action_types.CREATE_NEW_SET] = 'ex',
 }
 
 -- Reverse-display lookup for stored linked_type prefixes. Used by the Edit
@@ -194,7 +198,8 @@ local SPELL_TYPE_LOOKUP = {
     ['SummonerPact'] = 'summoning magic',
 }
 
-function action_binder:setup(buttonmapping, save_binding_func, delete_binding_func, theme_options, get_crossbar_sets_func, base_x, base_y, max_width, max_height, change_slot_icon_func, save_global_icon_func, save_custom_action_func, update_custom_action_func, delete_custom_action_func)
+function action_binder:setup(buttonmapping, save_binding_func, delete_binding_func, theme_options, get_crossbar_sets_func, base_x, base_y, max_width, max_height,
+change_slot_icon_func, save_global_icon_func, save_custom_action_func, update_custom_action_func, delete_custom_action_func, create_new_set_func)
     self.button_layout = buttonmapping.button_layout
     self.confirm_button = buttonmapping.confirm_button
     self.cancel_button = buttonmapping.cancel_button
@@ -208,7 +213,12 @@ function action_binder:setup(buttonmapping, save_binding_func, delete_binding_fu
     self.save_custom_action = save_custom_action_func
     self.update_custom_action = update_custom_action_func
     self.delete_custom_action = delete_custom_action_func
+    self.create_new_set_binding = create_new_set_func
     self.is_hidden = true
+    self.capturing_text = false
+    self.text_entry_buffer = ''
+    self.new_set_name = nil
+    self.new_set_alias = nil
     self.selector = require('ui/selectablelist')
     self.selector:setup(theme_options, base_x + 50, base_y + 75, max_width - 100, max_height - 175)
     self.theme_options = theme_options
@@ -283,6 +293,10 @@ function action_binder:reset_state()
     self.editing_custom_action = false
     self.custom_action_original_name = nil
     self.custom_action_delete_target = nil
+    self.capturing_text = false
+    self.text_entry_buffer = ''
+    self.new_set_name = nil
+    self.new_set_alias = nil
 end
 
 function action_binder:reset_gamepad()
@@ -644,6 +658,11 @@ function action_binder:submit_selected_option()
         if (self.action_type == action_types.SHOW_CREDITS) then
             self.state = states.SHOW_CREDITS
             self:display_credits()
+        elseif (self.action_type == action_types.CREATE_NEW_SET) then
+            self.state = states.ENTER_SET_NAME
+            self.capturing_text = true
+            self.text_entry_buffer = ''
+            self:display_text_entry('Enter New Set Name', '<Type set name, press Enter>')
         elseif (self.action_type == action_types.MOVE_CROSSBARS) then
             self.state = states.MOVE_CROSSBARS
             self:display_crossbar_mover()
@@ -769,6 +788,18 @@ function action_binder:submit_selected_option()
         self.action_target = action_targets[self.selector:submit_selected_option().id]
         self.state = states.SELECT_BUTTON_ASSIGNMENT
         self:display_button_assigner()
+    elseif (self.state == states.SELECT_ICON) then
+        self.selection_states[states.SELECT_ICON] = self.selector:export_selection_state()
+        local option = self.selector:submit_selected_option()
+        if (option.id == 'PREV') then
+            self.selector:decrement_page()
+        elseif (option.id == 'NEXT') then
+            self.selector:increment_page()
+        else
+            self.action_icon = option.data.icon_path
+            self.state = states.SELECT_BUTTON_ASSIGNMENT
+            self:display_button_assigner()
+        end
     elseif (self.state == states.SELECT_BUTTON_ASSIGNMENT) then
         self.state = states.CONFIRM_BUTTON_ASSIGNMENT
         self:display_button_confirmer()
@@ -1000,6 +1031,30 @@ function action_binder:go_back()
         self:display_action_type_selector()
         self.selector:import_selection_state(self.selection_states[states.SELECT_ACTION_TYPE])
         self.selection_states[states.SELECT_ACTION_TYPE] = nil
+    elseif (self.state == states.ENTER_SET_NAME) then
+        self.capturing_text = false
+        self.text_entry_buffer = ''
+        self.state = states.SELECT_ACTION_TYPE
+        self.action_type = nil
+        self.selector:set_page(self.selection_states[states.SELECT_ACTION_TYPE].page)
+        self:display_action_type_selector()
+        self.selector:import_selection_state(self.selection_states[states.SELECT_ACTION_TYPE])
+        self.selection_states[states.SELECT_ACTION_TYPE] = nil
+    elseif (self.state == states.ENTER_SET_ALIAS) then
+        self.capturing_text = true
+        self.text_entry_buffer = ''
+        self.new_set_name = nil
+        self.state = states.ENTER_SET_NAME
+        self:display_text_entry('Enter New Set Name', '<Type set name, press Enter>')
+    elseif (self.state == states.SELECT_ICON) then
+        -- Go back to alias entry
+        self.capturing_text = true
+        self.text_entry_buffer = self.new_set_alias or ''
+        self.state = states.ENTER_SET_ALIAS
+        self:display_text_entry('Enter Button Alias', '<Type alias, press Enter>')
+        if (self.new_set_alias and self.new_set_alias ~= '') then
+            self:update_text_entry_display()
+        end
     elseif (self.state == states.MOVE_CROSSBARS) then
         self.state = states.SELECT_ACTION_TYPE
         self.action_type = nil
@@ -1045,7 +1100,19 @@ function action_binder:go_back()
             self.selection_states[states.SELECT_ACTION] = nil
         end
     elseif (self.state == states.SELECT_BUTTON_ASSIGNMENT) then
-        if (self.action_type == action_types.CHANGE_ICON or self.action_type == action_types.GLOBAL_ICON_SET) then
+        if (self.action_type == action_types.CREATE_NEW_SET) then
+            -- Go back to icon selection
+            self.state = states.SELECT_ICON
+            self.action_icon = nil
+            if (self.selection_states[states.SELECT_ICON] ~= nil) then
+                self.selector:set_page(self.selection_states[states.SELECT_ICON].page)
+                self:display_icon_selector_sylvebits()
+                self.selector:import_selection_state(self.selection_states[states.SELECT_ICON])
+                self.selection_states[states.SELECT_ICON] = nil
+            else
+                self:display_icon_selector_sylvebits()
+            end
+        elseif (self.action_type == action_types.CHANGE_ICON or self.action_type == action_types.GLOBAL_ICON_SET) then
             self.state = states.SELECT_ACTION_TYPE
             self.action_type = nil
             if (self.selection_states[states.SELECT_ACTION_TYPE] ~= nil) then
@@ -1056,6 +1123,7 @@ function action_binder:go_back()
                 self.selector:import_selection_state(self.selection_states[states.SELECT_ACTION_TYPE])
                 self.selection_states[states.SELECT_ACTION_TYPE] = nil
             end
+        -- check if we skipped target selection due to "Self" being the only option
         elseif (self.selection_states[states.SELECT_ACTION_TARGET] == nil) then
             self.state = states.SELECT_ACTION
             self.action_name = nil
@@ -1224,7 +1292,7 @@ function action_binder:display_action_type_selector()
     if (player_data.custom_actions ~= nil and next(player_data.custom_actions) ~= nil) then
         action_type_list:append({id = action_types.CUSTOM_ACTION, name = 'Custom Action', icon = 'images/' ..get_icon_pathbase() .. '/custom_actions.png'})
     end
-    
+
     if (pet_jobs[main_job] or pet_jobs[sub_job]) then
         action_type_list:append({id = action_types.PET_COMMAND, name = 'Pet Command', icon = 'images/' ..get_icon_pathbase() .. '/mounts/crab.png'})
     end
@@ -1269,6 +1337,7 @@ function action_binder:display_action_type_selector()
     if (main_job == 'GEO' or sub_job == 'GEO') then
         action_type_list:append({id = action_types.GEOMANCY, name = 'Geomancy', icon = 'images/' ..get_icon_pathbase() .. '/jobs/GEO.png'})
     end
+
     action_type_list:append({id = action_types.TRUST, name = 'Call Trust', icon = 'images/' ..get_icon_pathbase() .. '/trust/yoran-oran.png'})
     action_type_list:append({id = action_types.MOUNT, name = 'Call Mount', icon = 'images/' ..get_icon_pathbase() .. '/mount.png'})
     action_type_list:append({id = action_types.USABLE_ITEM, name = 'Use Item', icon = 'images/' ..get_icon_pathbase() .. '/usable-item.png'})
@@ -1281,17 +1350,19 @@ function action_binder:display_action_type_selector()
     action_type_list:append({id = action_types.LAST_SYNTH, name = 'Repeat Last Synth', icon = 'images/' ..get_icon_pathbase() .. '/synth.png'})
     action_type_list:append({id = action_types.SWITCH_CROSSBARS, name = 'Switch Crossbars', icon = 'images/' ..get_icon_pathbase() .. '/ui/facebuttons_ps.png'})
     action_type_list:append({id = action_types.QUICK_SWITCH_CROSSBARS, name = 'Quick XB Switch', icon = 'images/' ..get_icon_pathbase() .. '/ui/facebuttons_ps.png'})
+    action_type_list:append({id = action_types.CREATE_NEW_SET, name = 'Create New Set', icon = 'images/' ..get_icon_pathbase() .. '/ui/dpad_' .. self.button_layout .. '.png'})
     action_type_list:append({id = action_types.MOVE_CROSSBARS, name = 'Move Crossbar', icon = 'images/' ..get_icon_pathbase() .. '/ui/dpad_ps.png'})
 	action_type_list:append({id = action_types.CHANGE_ICON, name = 'Change Icon', icon = 'images/' ..get_icon_pathbase() .. '/icon-set.png'})
     action_type_list:append({id = action_types.GLOBAL_ICON_SET, name = 'Global Icon Set', icon = 'images/' ..get_icon_pathbase() .. '/icon-set.png'})
     action_type_list:append({id = action_types.CREATE_CUSTOM_ACTION, name = 'Create Custom Action', icon = 'images/' ..get_icon_pathbase() .. '/custom_actions.png'})
+
     if (player_data.custom_actions ~= nil and next(player_data.custom_actions) ~= nil) then
         action_type_list:append({id = action_types.EDIT_CUSTOM_ACTION, name = 'Edit Custom Action', icon = 'images/' ..get_icon_pathbase() .. '/custom_actions.png'})
         action_type_list:append({id = action_types.DELETE_CUSTOM_ACTION, name = 'Delete Custom Action', icon = 'images/' ..get_icon_pathbase() .. '/ui/red-x.png'})
     end
+
     action_type_list:append({id = action_types.SHOW_CREDITS, name = 'XIVCrossbar Credits', icon = 'images/credit_avatars/xiv.png'})
     self.selector:display_options(action_type_list)
-
     self:show_control_hints('Confirm', 'Exit')
 end
 
@@ -1381,7 +1452,7 @@ function action_binder:display_target_selector()
         target_options:append({id = 'SELECT_TARGET', name = 'Select Target (<st>)', icon = 'images/' .. get_icon_pathbase() .. '/mappoint.png'})
         target_options:append({id = 'BATTLE_TARGET', name = 'Battle Target (<bt>)', icon = 'images/' .. get_icon_pathbase() .. '/mappoint.png'})
     end
-    
+
     local is_only_self_targeted = self.target_type['Self'] and not (self.target_type['Party'] or self.target_type['Ally'] or self.target_type['Player'] or self.target_type['NPC'])
     if (is_only_self_targeted and self.theme_options.allow_stpc_for_self_targeted_actions) then
         target_options:append({id = 'SELECT_PLAYER', name = 'Select Player (<stpc>)', icon = 'images/' .. get_icon_pathbase() .. '/mappoint.png'})
@@ -1557,7 +1628,7 @@ function action_binder:show_pressed_buttons()
     if (self.button_y_pressed) then
         icons:append('ui/binding_icons/facebuttons_' .. self.button_layout .. '_y.png')
     end
-    
+
     local all_icon_width = #icons * 40
     local center = self.width / 2
     local start_x = self.base_x + center - (all_icon_width / 2)
@@ -1898,7 +1969,7 @@ function action_binder:display_magic_selector_internal(magic_type)
 
     local main_spells = get_spells_for_job(player.main_job_id, level, magic_type)
     local sub_spells = get_spells_for_job(player.sub_job_id, player.sub_job_level, magic_type)
-    
+
     local all_spells = T{}
     for id in pairs(main_spells) do
         all_spells[id] = id
@@ -2185,7 +2256,7 @@ function action_binder:display_rune_enchantment_selector()
     local player = windower.ffxi.get_player()
     local is_main_high_enough = (player.main_job_id == 22 and player.main_job_level >= 5)
     local is_sub_high_enough = (player.sub_job_id == 22 and player.sub_job_level >= 5)
-    
+
     local rune_enchantment_list = L{}
     if (is_main_high_enough or is_sub_high_enough) then
         rune_enchantment_list = L{358, 359, 360, 361, 362, 363, 364, 365}
@@ -2660,7 +2731,7 @@ function action_binder:display_edit_custom_action_review()
         '  //xivcrossbar ca a <alias>    //xivcrossbar ca n <name>    //xivcrossbar ca c <command>',
     }
     local x = self.base_x + self.width / 2 - 260
-    local y = self.base_y + self.height - 50 - (#lines * 20) - 120 
+    local y = self.base_y + self.height - 50 - (#lines * 20) - 120
     for i, line in ipairs(lines) do
         local t = self:create_text(line, x, y + (i - 1) * 20)
         t:size(13)
@@ -2984,6 +3055,235 @@ function action_binder:display_player_selector(include_self)
 
     self.selector:display_options(get_party_names(include_self))
     self:show_control_hints('Confirm', 'Go Back')
+end
+
+-- TODO: Either rename this to better discern it from action_binder:display_icon_selector() or merge the two functions
+function action_binder:display_icon_selector_sylvebits()
+    self.title:text('Select Icon')
+    self.title:show()
+
+    local icon_list = L{}
+    local pathbase = get_icon_pathbase()
+    local base_dir = windower.addon_path .. 'images/' .. pathbase
+
+    -- Excluded files that are UI framework images, not usable as button icons
+    local excluded_files = {
+        ['bar_bg'] = true,
+        ['bar_bg_compact'] = true,
+        ['black-square'] = true,
+        ['blank'] = true,
+        ['blue-square'] = true,
+        ['feedback'] = true,
+        ['frame'] = true,
+        ['frame_step1'] = true,
+        ['frame_step2'] = true,
+        ['frame_step3'] = true,
+        ['frame_step4'] = true,
+        ['frame_step5'] = true,
+        ['frame_step6'] = true,
+        ['frame_step7'] = true,
+        ['frame_step8'] = true,
+        ['green'] = true,
+        ['red'] = true,
+        ['square'] = true,
+        ['needs_job_ability'] = true,
+        ['red-x'] = true,
+        ['bg'] = true,
+    }
+
+    -- Excluded subdirectories that contain UI framework images, not button icons
+    local excluded_dirs = {
+        ['binding_icons'] = true,
+    }
+
+    local icon_id = 1
+
+    -- Scan the icon pack directory recursively for all .png files
+    local command = 'dir /b /s "' .. base_dir .. '\\*.png" 2>nul'
+    local handle = io.popen(command)
+    if (handle) then
+        local all_icons = L{}
+        for full_path in handle:lines() do
+            -- Convert backslashes to forward slashes
+            full_path = full_path:gsub('\\', '/')
+
+            -- Extract the relative path after the iconpack base directory
+            local relative = full_path:match('.*/iconpacks/[^/]+/(.*)')
+            if (relative) then
+                -- Remove .png extension
+                local icon_key = relative:gsub('%.png$', '')
+
+                -- Get just the filename without extension
+                local filename = icon_key:match('.*/(.+)$') or icon_key
+
+                -- Get the subdirectory if any
+                local subdir = icon_key:match('(.*)/') or ''
+                local immediate_dir = subdir:match('.*/(.*)')  or subdir
+
+                -- Skip excluded files and directories
+                if (not excluded_files[filename] and not excluded_dirs[immediate_dir]) then
+                    -- Build display name: capitalize and clean up
+                    local display_name = filename:gsub('-', ' '):gsub('_', ' ')
+                    -- Capitalize first letter of each word
+                    display_name = display_name:gsub('(%a)([%w]*)', function(first, rest)
+                        return first:upper() .. rest
+                    end)
+
+                    -- Build category prefix for sorting
+                    local sort_key = subdir .. '/' .. filename
+
+                    all_icons:append({
+                        sort_key = sort_key,
+                        name = display_name,
+                        icon = 'images/' .. pathbase .. '/' .. icon_key .. '.png',
+                        icon_path = '/' .. icon_key,
+                        subdir = subdir
+                    })
+                end
+            end
+        end
+        handle:close()
+
+        -- Sort alphabetically by category then name
+        all_icons:sort(function(a, b) return a.sort_key < b.sort_key end)
+
+        -- Build the final icon list
+        for i, entry in ipairs(all_icons) do
+            local data = { icon_path = entry.icon_path }
+            icon_list:append({id = icon_id, name = entry.name, icon = entry.icon, data = data})
+            icon_id = icon_id + 1
+        end
+    end
+
+    self.selector:display_options(icon_list)
+    self:show_control_hints('Confirm', 'Go Back')
+end
+
+function action_binder:display_text_entry(title_text, placeholder)
+    self.title:text(title_text)
+    self.title:show()
+
+    self.selector:hide()
+
+    for i, image in ipairs(self.images) do
+        image:hide()
+    end
+    for i, hint in ipairs(self.hints) do
+        hint:hide()
+    end
+
+    windower.prim.set_visibility('button_entry_bg', true)
+
+    local caption_x = self.base_x + self.width / 2 - 200
+    local caption_y = self.base_y + self.height / 2 - 40
+
+    local caption = self:create_text(placeholder, caption_x, caption_y)
+    caption:size(14)
+    self.hints:append(caption)
+    self:show_exit_hint()
+end
+
+function action_binder:update_text_entry_display()
+    for i, hint in ipairs(self.hints) do
+        hint:hide()
+    end
+
+    local caption_x = self.base_x + self.width / 2 - 200
+    local caption_y = self.base_y + self.height / 2 - 40
+
+    local display_text = self.text_entry_buffer
+    if (display_text == '') then
+        if (self.state == states.ENTER_SET_NAME) then
+            display_text = '<Type set name, press Enter>'
+        else
+            display_text = '<Type alias, press Enter>'
+        end
+    end
+
+    local caption = self:create_text(display_text, caption_x, caption_y)
+    caption:size(14)
+    self.hints:append(caption)
+    self:show_exit_hint()
+end
+
+function action_binder:send_key(char)
+    if (self.capturing_text) then
+        self.text_entry_buffer = self.text_entry_buffer .. char
+        self:update_text_entry_display()
+    end
+end
+
+function action_binder:send_backspace()
+    if (self.capturing_text) then
+        self.text_entry_buffer = self.text_entry_buffer:sub(1, -2)
+        self:update_text_entry_display()
+    end
+end
+
+function action_binder:send_enter()
+    if (not self.capturing_text) then return end
+
+    if (self.state == states.ENTER_SET_NAME) then
+        local name = self.text_entry_buffer
+        if (name == nil or name == '') then
+            return
+        end
+
+        -- Validate: no reserved names
+        local name_lower = name:lower():gsub(' ', '-'):gsub('\'', '')
+        if (name_lower == 'default' or name_lower == 'job-default' or name_lower == 'all-jobs-default') then
+            self:update_text_entry_display()
+            return
+        end
+
+        -- Check for duplicate set names
+        local existing_sets = self.get_crossbar_sets_binding()
+        for i, set_name in ipairs(existing_sets) do
+            local existing_lower = set_name:lower():gsub(' ', '-'):gsub('\'', '')
+            if (existing_lower == name_lower) then
+                self:update_text_entry_display()
+                return
+            end
+        end
+
+        self.new_set_name = name
+        self.text_entry_buffer = ''
+        self.state = states.ENTER_SET_ALIAS
+        self:display_text_entry('Enter Button Alias', '<Type alias, press Enter>')
+    elseif (self.state == states.ENTER_SET_ALIAS) then
+        local alias = self.text_entry_buffer
+        if (alias == nil or alias == '') then
+            -- If no alias given, default to the set name
+            alias = self.new_set_name
+        end
+
+        self.new_set_alias = alias
+        self.capturing_text = false
+
+        -- Create the new set
+        self.create_new_set_binding(self.new_set_name)
+
+        -- Set up the action basics
+        self.action_name = self.new_set_alias
+        self.action_command = 'xb bar ' .. self.new_set_name
+        self.action_target = nil
+
+        -- Proceed to icon selection
+        self.state = states.SELECT_ICON
+        self:display_icon_selector()
+    end
+end
+
+function action_binder:send_escape_text()
+    if (self.capturing_text) then
+        self.capturing_text = false
+        self.text_entry_buffer = ''
+        self:go_back()
+    end
+end
+
+function action_binder:is_capturing_text()
+    return self.capturing_text
 end
 
 function action_binder:display_credits()
@@ -3590,7 +3890,9 @@ windower.register_event('mouse', function(type, x, y, delta, blocked)
 end)
 
 function action_binder:reload()
-    self:set_ui_offset_callback(settings.Style.OffsetX, settings.Style.OffsetY)
+    if (self.update_offsets ~= nil) then
+		self.update_offsets(settings.Style.OffsetX, settings.Style.OffsetY)
+	end
 end
 
 -- HELPER FUNCTIONS

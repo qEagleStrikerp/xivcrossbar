@@ -1,7 +1,7 @@
 -- Addon description
 _addon.name = 'XIVCrossbar' -- based on Edeon's XIV Hotbar
 _addon.author = 'Aliekber, various friendly neighborhood modders'
--- Credit goes to: Aeliya, BlueSummersC, FionaBrightgrass, GrayFox2510, qEagleStrikerp, XerevNonori
+-- Credit goes to: Aeliya, BlueSummersC, FionaBrightgrass, GrayFox2510, qEagleStrikerp, Sylvebits, XerevNonori
 _addon.version = '0.4.0'
 _addon.language = 'english'
 _addon.commands = {'xivcrossbar', 'xb', 'xcb'}
@@ -133,6 +133,12 @@ function get_crossbar_sets()
     return player:get_crossbar_names()
 end
 
+function create_new_set(name)
+    player:create_new_environment(name)
+    player:save_hotbar()
+    reload_hotbar()
+end
+
 -- Change Icon callback: replaces the icon of an already-bound slot, persists
 -- the hotbar XML, and reloads so the new icon shows immediately. Wired into
 -- action_binder.lua's :setup().
@@ -253,7 +259,8 @@ function initialize()
 
     if (buttonmapping.validate()) then
         theme_options.button_layout = buttonmapping.button_layout
-        action_binder:setup(buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action)
+        action_binder:setup(buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300,
+            windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action, create_new_set)
     else
         theme_options.button_layout = 'nintendo'
         local temp_buttonmapping = {}
@@ -263,7 +270,8 @@ function initialize()
         theme_options.activewindow_button = 'x'
         gamepad_mapper:setup(buttonmapping, start_controller_wrappers, theme_options, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450)
         gamepad_mapper:show(true)
-        action_binder:setup(temp_buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action)
+        action_binder:setup(temp_buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300,
+            windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action, create_new_set)
     end
 
     player:initialize(windower_player, server, theme_options, enchanted_items)
@@ -1018,6 +1026,26 @@ windower.register_event('keyboard', function(dik, pressed, flags, blocked)
         windower.send_command(command)
     end
 
+    if (action_binder:is_capturing_text() and keys[dik] ~= nil) then
+        if (pressed) then
+            if (shift_pressed) then
+                action_binder:send_key(keys[dik])
+            else
+                action_binder:send_key(keys[dik]:lower())
+            end
+        end
+        return true
+    elseif (action_binder:is_capturing_text() and dik == keyboard.backspace and pressed) then
+        action_binder:send_backspace()
+        return true
+    elseif (action_binder:is_capturing_text() and dik == keyboard.esc and pressed) then
+        action_binder:send_escape_text()
+        return true
+    elseif (action_binder:is_capturing_text() and dik == keyboard.enter and pressed) then
+        action_binder:send_enter()
+        return true
+    end
+
     if (env_chooser.capturing and keys[dik] ~= nil) then
         if (pressed) then
             if (shift_pressed) then
@@ -1079,7 +1107,10 @@ windower.register_event('keyboard', function(dik, pressed, flags, blocked)
     end
 
     if (not gamepad_mapper.is_showing and gamepad_state.capturing and gamepad.is_minus(dik) and pressed) then
-        if (action_binder.is_hidden) then
+        if (action_binder:is_capturing_text()) then
+            -- Don't close the binder while typing
+            return true
+        elseif (action_binder.is_hidden) then
             action_binder:show()
             ui:hide_button_hints()
             env_chooser:temp_hide_default_sets_tooltip()

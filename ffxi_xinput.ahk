@@ -56,22 +56,44 @@ XInput_Init(dll="C:\Windows\System32\xinput1_3")
     
     ;=============== END CONSTANTS =================
     
-    _XInput_hm := DllCall("LoadLibrary" ,"str",dll)
-    
+    ; Explicit Ptr return type is REQUIRED on 64-bit AHK — the default Int
+    ; return would truncate the 64-bit module handle to 32 bits, and every
+    ; GetProcAddress against that garbage handle would fail.
+    _XInput_hm := DllCall("LoadLibrary" ,"Str",dll, "Ptr")
+
     if !_XInput_hm
     {
-        MsgBox, Failed to initialize XInput: %dll%.dll not found.
-        return
+        ; Fallback: try xinput1_4.dll before giving up. xinput1_3 is what
+        ; games have traditionally used; xinput1_4 ships with Windows 8+.
+        if (dll != "C:\Windows\System32\xinput1_4")
+        {
+            dll := "C:\Windows\System32\xinput1_4"
+            _XInput_hm := DllCall("LoadLibrary" ,"Str",dll, "Ptr")
+        }
+        if !_XInput_hm
+        {
+            MsgBox, % "Failed to initialize XInput: neither xinput1_3.dll nor xinput1_4.dll could be loaded.`n`nAHK Version: " . A_AhkVersion . "`nAHK exe: " . A_AhkPath
+            return
+        }
     }
-    
-    _XInput_GetState        := DllCall("GetProcAddress" ,"ptr",_XInput_hm ,"astr","XInputGetState")
-    _XInput_SetState        := DllCall("GetProcAddress" ,"ptr",_XInput_hm ,"astr","XInputSetState")
-    _XInput_GetCapabilities := DllCall("GetProcAddress" ,"ptr",_XInput_hm ,"astr","XInputGetCapabilities")
-    
+
+    ; Same story on the return side — function pointers are 64-bit on 64-bit AHK.
+    _XInput_GetState        := DllCall("GetProcAddress" ,"Ptr",_XInput_hm ,"AStr","XInputGetState", "Ptr")
+    _XInput_SetState        := DllCall("GetProcAddress" ,"Ptr",_XInput_hm ,"AStr","XInputSetState", "Ptr")
+    _XInput_GetCapabilities := DllCall("GetProcAddress" ,"Ptr",_XInput_hm ,"AStr","XInputGetCapabilities", "Ptr")
+
     if !(_XInput_GetState && _XInput_SetState && _XInput_GetCapabilities)
     {
+        missing := ""
+        if !_XInput_GetState
+            missing .= "XInputGetState "
+        if !_XInput_SetState
+            missing .= "XInputSetState "
+        if !_XInput_GetCapabilities
+            missing .= "XInputGetCapabilities "
+        hmHex := Format("{:#x}", _XInput_hm)
         XInput_Term()
-        MsgBox, Failed to initialize XInput: function not found.
+        MsgBox, % "Failed to initialize XInput: function(s) not found in " . dll . ".dll`n`nMissing: " . missing . "`nModule handle: " . hmHex . "`nAHK Version: " . A_AhkVersion . "`nAHK exe: " . A_AhkPath
         return
     }
 }
@@ -103,7 +125,10 @@ XInput_GetState(UserIndex)
     
     VarSetCapacity(xiState,16)
 
-    if ErrorLevel := DllCall(_XInput_GetState ,"uint",UserIndex ,"uint",&xiState)
+    ; &xiState must be passed as Ptr, not UInt — on 64-bit AHK UInt would
+    ; truncate the 64-bit stack address and XInput would write to the wrong
+    ; memory (or the call would fault).
+    if ErrorLevel := DllCall(_XInput_GetState ,"UInt",UserIndex ,"Ptr",&xiState)
         return 0
     
     return {
@@ -211,7 +236,7 @@ XInput_GetCapabilities(UserIndex, Flags)
 XInput_Term() {
     global
     if _XInput_hm
-        DllCall("FreeLibrary","uint",_XInput_hm), _XInput_hm :=_XInput_GetState :=_XInput_SetState :=_XInput_GetCapabilities :=0
+        DllCall("FreeLibrary","Ptr",_XInput_hm), _XInput_hm :=_XInput_GetState :=_XInput_SetState :=_XInput_GetCapabilities :=0
 }
 
 #SingleInstance force
@@ -261,7 +286,8 @@ Loop {
                 } else If (State.bLeftTrigger <= TRIGGER_DEAD_ZONE and isLeftTriggerDown) {
                     isLeftTriggerDown := false
                     SendInput {f11 up}
-                    If (!State.bRightTrigger and !isRightTriggerDown and isCtrlDown) {
+
+                    If (State.bRightTrigger <= TRIGGER_DEAD_ZONE and !isRightTriggerDown and isCtrlDown) {
                         isCtrlDown := false
                         SendInput {Ctrl up}
                     }
@@ -277,7 +303,8 @@ Loop {
                 } else If (State.bRightTrigger <= TRIGGER_DEAD_ZONE and isRightTriggerDown) {
                     isRightTriggerDown := false
                     SendInput {f12 up}
-                    If (!State.bLeftTrigger and !isLeftTriggerDown and isCtrlDown) {
+
+                    If (State.bLeftTrigger <= TRIGGER_DEAD_ZONE and !isLeftTriggerDown and isCtrlDown) {
                         isCtrlDown := false
                         SendInput {Ctrl up}
                     }
@@ -521,6 +548,57 @@ Loop {
 
                     isButtonStartDown := false
                 }
+
+                If (isCtrlDown
+                    and State.bLeftTrigger <= TRIGGER_DEAD_ZONE
+                    and State.bRightTrigger <= TRIGGER_DEAD_ZONE) {
+                    isCtrlDown := false
+                    isLeftTriggerDown := false
+                    isRightTriggerDown := false
+                    SendInput {Ctrl up}
+                }
+            } Else {
+                If (isButtonStartDown and !(State.wButtons & XINPUT_GAMEPAD_START)) {
+                    isButtonStartDown := false
+                    SendInput {f10 up}
+                    SendInput {Ctrl up}
+                }
+                If (isButtonBackDown and !(State.wButtons & XINPUT_GAMEPAD_BACK)) {
+                    isButtonBackDown := false
+                    SendInput {f9 up}
+                    SendInput {Ctrl up}
+                }
+                If (isCtrlDown and State.bLeftTrigger <= TRIGGER_DEAD_ZONE and State.bRightTrigger <= TRIGGER_DEAD_ZONE) {
+                    isCtrlDown := false
+                    isLeftTriggerDown := false
+                    isRightTriggerDown := false
+                    SendInput {Ctrl up}
+                }
+
+                If (!isButtonADown and State.wButtons & XINPUT_GAMEPAD_A) {
+                    isButtonADown := true
+                    WinActivate, ahk_class FFXiClass
+                } Else If (isButtonADown and !(State.wButtons & XINPUT_GAMEPAD_A)) {
+                    isButtonADown := false
+                }
+                If (!isButtonBDown and State.wButtons & XINPUT_GAMEPAD_B) {
+                    isButtonBDown := true
+                    WinActivate, ahk_class FFXiClass
+                } Else If (isButtonBDown and !(State.wButtons & XINPUT_GAMEPAD_B)) {
+                    isButtonBDown := false
+                }
+                If (!isButtonXDown and State.wButtons & XINPUT_GAMEPAD_X) {
+                    isButtonXDown := true
+                    WinActivate, ahk_class FFXiClass
+                } Else If (isButtonXDown and !(State.wButtons & XINPUT_GAMEPAD_X)) {
+                    isButtonXDown := false
+                }
+                If (!isButtonYDown and State.wButtons & XINPUT_GAMEPAD_Y) {
+                    isButtonYDown := true
+                    WinActivate, ahk_class FFXiClass
+                } Else If (isButtonYDown and !(State.wButtons & XINPUT_GAMEPAD_Y)) {
+                    isButtonYDown := false
+                }
             }
         }
     }
@@ -529,14 +607,19 @@ Loop {
 
 ; Helper subroutines. *DON'T* modify these to remap, instead just change which buttons call them
 SendConfirmKey:
+WinActivate, ahk_class FFXiClass
 SendInput {Enter}
 return
 SendCancelKey:
+WinActivate, ahk_class FFXiClass
 SendInput {Esc}
 return
 SendMainMenuKey:
+WinActivate, ahk_class FFXiClass
 SendInput {NumpadSub}
 return
 SendActiveWindowKey:
+WinActivate, ahk_class FFXiClass
 SendInput {NumpadAdd}
 return
+

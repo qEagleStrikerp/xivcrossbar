@@ -11,7 +11,8 @@ require('lists')
 local default_hotbars = {
     ['default'] = true,
     ['job-default'] = true,
-    ['all-jobs-default'] = true
+    ['all-jobs-default'] = true,
+    ['shared'] = true
 }
 
 local ADD_NEW_SET = '+ Add New Set'
@@ -84,6 +85,7 @@ function env_chooser:setup(theme_options)
     self.theme.slot_opacity = theme_options.slot_opacity
     self.theme.disabled_slot_opacity = theme_options.disabled_slot_opacity
     self.theme.button_layout = theme_options.button_layout
+    self.theme.use_shared_set = theme_options.UseSharedSet ~= false
 
     self:setup_metrics(theme_options)
     self:load(theme_options)
@@ -160,6 +162,7 @@ function env_chooser:get_player_environments(player_hotbar)
     local default = nil
     local job_default = nil
     local all_jobs_default = nil
+    local shared = nil
 
     for environment_name, environment in pairs(player_hotbar) do
         if (environment.name == nil) then
@@ -174,6 +177,8 @@ function env_chooser:get_player_environments(player_hotbar)
             job_default = environment
         elseif (kebab_name == 'all-jobs-default') then
             all_jobs_default = environment
+        elseif (kebab_name == 'shared') then
+            shared = environment
         end
     end
 
@@ -188,9 +193,12 @@ function env_chooser:get_player_environments(player_hotbar)
     if (default ~= nil) then
         environments:append(default)
     end
+    if (shared ~= nil and self.theme.use_shared_set) then
+        environments:append(shared)
+    end
 
     for i, environment in ipairs(non_defaults) do
-       environments:append(environment) 
+       environments:append(environment)
     end
 
     environments:append({['name'] = ADD_NEW_SET})
@@ -202,7 +210,7 @@ local HIDDEN_SPACE = "​" -- Invisible character for color formatting
 local HAIRLINE = " "
 
 function env_chooser:maybe_show_default_sets_tooltip(name, env_count)
-    if (default_hotbars[kebab_casify(name)]) then
+    if (default_hotbars[kebab_casify(name)] and kebab_casify(name) ~= 'shared') then
         windower.prim.set_position('tooltip_background', self:get_name_x(index) + 200, self.pos_y - 295)
         windower.prim.set_size('tooltip_background', 400, 218)
         windower.prim.set_visibility('tooltip_background', true)
@@ -237,7 +245,7 @@ function env_chooser:temp_hide_default_sets_tooltip()
 end
 
 function env_chooser:maybe_unhide_default_sets_tooltip()
-    if (default_hotbars[kebab_casify(self.current_environment)]) then
+    if (default_hotbars[kebab_casify(self.current_environment)] and kebab_casify(self.current_environment) ~= 'shared') then
         windower.prim.set_visibility('tooltip_background', true)
         self.tooltip:show()
     end
@@ -278,10 +286,11 @@ function env_chooser:show_player_environments(player_hotbar, current_environment
 end
 
 function env_chooser:hide_player_environments()
-    coroutine.schedule(maybe_hide_me, 0.25)
-    coroutine.schedule(maybe_hide_me, 0.5)
-    coroutine.schedule(maybe_hide_me, 0.75)
-    coroutine.schedule(maybe_hide_me, 1)
+    if (self.current_environment == kebab_casify(ADD_NEW_SET)) then
+        self:accept_text_entry()
+    else
+        hide_me()
+    end
 end
 
 function env_chooser:accept_text_entry()
@@ -329,7 +338,7 @@ end
 
 function env_chooser:validate_new_set_name()
     local new_name = kebab_casify(self.new_set_name)
-    if (new_name == 'default' or new_name == 'job-default' or new_name == 'all-jobs-default') then
+    if (new_name == 'default' or new_name == 'job-default' or new_name == 'all-jobs-default' or new_name == 'shared') then
         return false
     end
 

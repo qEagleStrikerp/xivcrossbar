@@ -1,31 +1,3 @@
---[[
-        Copyright © 2017, SirEdeonX
-        All rights reserved.
-
-        Redistribution and use in source and binary forms, with or without
-        modification, are permitted provided that the following conditions are met:
-
-            * Redistributions of source code must retain the above copyright
-              notice, this list of conditions and the following disclaimer.
-            * Redistributions in binary form must reproduce the above copyright
-              notice, this list of conditions and the following disclaimer in the
-              documentation and/or other materials provided with the distribution.
-            * Neither the name of xivhotbar nor the
-              names of its contributors may be used to endorse or promote products
-              derived from this software without specific prior written permission.
-
-        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-        ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-        WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-        DISCLAIMED. IN NO EVENT SHALL SirEdeonX BE LIABLE FOR ANY
-        DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-        (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-        ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-        SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-]]
-
 local icon_extractor = require('ui/icon_extractor')
 local kebab_casify = require('libs/kebab_casify')
 local crossbar_abilities = require('resources/crossbar_abilities')
@@ -58,8 +30,12 @@ local spellsThatRequireJA = require('spells_that_require_ja')
 ui.hotbar_width = 0
 ui.hotbar_spacing = 0
 ui.slot_spacing = 0
-ui.pos_x = 0
-ui.pos_y = 0
+ui.pos_x = 700
+ui.pos_y = 500
+ui.gcd_offset_y = 130
+ui.gcd_offset_x = 0
+ui.aa_offset_y = 120 
+ui.aa_offset_x = 0
 
 -- ui variables
 ui.battle_notice = images.new(images_setup)
@@ -138,9 +114,19 @@ function ui:get_slot_x(h, i)
         elseif (h == 3 or h == 4) then
             base = base + 150
         elseif (h == 5) then
-            base = base - 70 -- left doublepress crossbar
+            base = base + 50 -- left doublepress crossbar
         elseif (h == 6) then
-            base = base + 370 -- right doublepress crossbar
+            base = base + 250 -- right doublepress crossbar
+        end
+
+        if h == 3 then
+            base = base + self.theme.alternate_press_offset_x
+        elseif h == 4 then
+            base = base - self.theme.alternate_press_offset_x
+        elseif h == 5 then
+            base = base - self.theme.double_press_offset_x
+        elseif h == 6 then
+            base = base + self.theme.double_press_offset_x
         end
 
         -- move the last icon in each group of 4 to the middle create the cross
@@ -171,6 +157,17 @@ function ui:get_slot_x(h, i)
             base = base - 70 -- left doublepress crossbar
         elseif (h == 6) then
             base = base + 70 -- right doublepress crossbar
+        end
+
+        -- Per-hotbar configurable X offsets (same as standard branch above).
+        if h == 3 then
+            base = base + self.theme.alternate_press_offset_x
+        elseif h == 4 then
+            base = base - self.theme.alternate_press_offset_x
+        elseif h == 5 then
+            base = base - self.theme.double_press_offset_x
+        elseif h == 6 then
+            base = base + self.theme.double_press_offset_x
         end
 
         -- move the last icon in each group of 4 to the middle create the cross
@@ -208,9 +205,13 @@ function ui:get_slot_y(h, i)
         spacing = spacing / 2
     end
 
-    -- the doublepress crossbars are up higher than the others
-    if (h > 4) then
-        base = base - spacing * 3.5
+    -- Per-hotbar configurable Y offsets (alternate-press / double-press
+    -- pairs). Y is uniform within a pair (no left/right split). Y is in
+    -- screen coordinates, so a NEGATIVE value moves the bar UP on screen.
+    if h == 3 or h == 4 then
+        base = base + self.theme.alternate_press_offset_y
+    elseif h == 5 or h == 6 then
+        base = base + self.theme.double_press_offset_y
     end
 
     -- move the second icon in each group of 4 to the top and move the
@@ -252,6 +253,40 @@ function ui:setup(theme_options, enchanted_items)
     self.theme.skillchain_open_color_green = theme_options.skillchain_open_color_green
     self.theme.skillchain_open_color_blue = theme_options.skillchain_open_color_blue
 
+    self.theme.spell_lockout_duration = theme_options.spell_lockout_duration
+    self.theme.spell_lockout_opacity = theme_options.spell_lockout_opacity
+    self.theme.spell_lockout_primary_red = theme_options.spell_lockout_primary_red
+    self.theme.spell_lockout_primary_green = theme_options.spell_lockout_primary_green
+    self.theme.spell_lockout_primary_blue = theme_options.spell_lockout_primary_blue
+    self.theme.spell_lockout_ending_red = theme_options.spell_lockout_ending_red
+    self.theme.spell_lockout_ending_green = theme_options.spell_lockout_ending_green
+    self.theme.spell_lockout_ending_blue = theme_options.spell_lockout_ending_blue
+
+    self.theme.ws_lockout_opacity = theme_options.ws_lockout_opacity
+    self.theme.ws_lockout_primary_red = theme_options.ws_lockout_primary_red
+    self.theme.ws_lockout_primary_green = theme_options.ws_lockout_primary_green
+    self.theme.ws_lockout_primary_blue = theme_options.ws_lockout_primary_blue
+
+    self.theme.ja_lockout_opacity = theme_options.ja_lockout_opacity
+    self.theme.ja_lockout_full_red = theme_options.ja_lockout_full_red
+    self.theme.ja_lockout_full_green = theme_options.ja_lockout_full_green
+    self.theme.ja_lockout_full_blue = theme_options.ja_lockout_full_blue
+    self.theme.ja_lockout_partial_red = theme_options.ja_lockout_partial_red
+    self.theme.ja_lockout_partial_green = theme_options.ja_lockout_partial_green
+    self.theme.ja_lockout_partial_blue = theme_options.ja_lockout_partial_blue
+
+    -- Auto-attack swing timer settings.
+    self.theme.aa_opacity = theme_options.aa_opacity
+    self.theme.aa_paused_opacity = theme_options.aa_paused_opacity
+    self.theme.aa_background_opacity = theme_options.aa_background_opacity
+    self.theme.aa_paused_background_opacity = theme_options.aa_paused_background_opacity
+    self.theme.aa_before_red = theme_options.aa_before_red
+    self.theme.aa_before_green = theme_options.aa_before_green
+    self.theme.aa_before_blue = theme_options.aa_before_blue
+    self.theme.aa_past_red = theme_options.aa_past_red
+    self.theme.aa_past_green = theme_options.aa_past_green
+    self.theme.aa_past_blue = theme_options.aa_past_blue
+
     self.theme.slot_opacity = theme_options.slot_opacity
     self.theme.disabled_slot_opacity = theme_options.disabled_slot_opacity
     self.theme.hotbar_number = theme_options.hotbar_number
@@ -268,9 +303,15 @@ function ui:setup(theme_options, enchanted_items)
     self.is_compact = theme_options.is_compact
     self.button_bg_alpha = theme_options.button_background_alpha
 
+    -- Per-hotbar position offsets. Applied as pure additive overrides in
+    -- get_slot_x / get_slot_y. See defaults.lua for the sign convention.
+    self.theme.alternate_press_offset_x = theme_options.alternate_press_offset_x
+    self.theme.alternate_press_offset_y = theme_options.alternate_press_offset_y
+    self.theme.double_press_offset_x = theme_options.double_press_offset_x
+    self.theme.double_press_offset_y = theme_options.double_press_offset_y
+
     self:setup_metrics(theme_options)
     self:load(theme_options)
-
 
     self.is_setup = true
 end
@@ -294,6 +335,33 @@ function ui:load(theme_options)
     windower.prim.set_position('skillchain_indicator', self:get_slot_x(1, 1) - 10, self:get_slot_y(1, 4) - 30)
     windower.prim.set_size('skillchain_indicator', 600, 10)
     windower.prim.set_visibility('skillchain_indicator', false)
+
+    windower.prim.create('gcd_indicator_bg')
+    windower.prim.set_color('gcd_indicator_bg', 150, 0, 0, 0)
+    windower.prim.set_position('gcd_indicator_bg', self:get_slot_x(1, 1) - 12, self:get_slot_y(1, 4) + 10)
+    windower.prim.set_size('gcd_indicator_bg', 604, 10)
+    windower.prim.set_visibility('gcd_indicator_bg', false)
+
+    windower.prim.create('gcd_indicator')
+    windower.prim.set_color('gcd_indicator', 220, 200, 200, 255) -- bluish/white
+    windower.prim.set_position('gcd_indicator', self:get_slot_x(1, 1) - 10, self:get_slot_y(1, 4) + 12)
+    windower.prim.set_size('gcd_indicator', 600, 6)
+    windower.prim.set_visibility('gcd_indicator', false)
+
+    windower.prim.create('aa_indicator_bg')
+    windower.prim.set_color('aa_indicator_bg', 150, 0, 0, 0)
+    windower.prim.set_size('aa_indicator_bg', 604, 10)
+    windower.prim.set_visibility('aa_indicator_bg', false)
+
+    windower.prim.create('aa_indicator_red')
+    windower.prim.set_color('aa_indicator_red', 220, 220, 30, 30)
+    windower.prim.set_size('aa_indicator_red', 300, 6)
+    windower.prim.set_visibility('aa_indicator_red', false)
+
+    windower.prim.create('aa_indicator_green')
+    windower.prim.set_color('aa_indicator_green', 220, 15, 205, 5)
+    windower.prim.set_size('aa_indicator_green', 300, 6)
+    windower.prim.set_visibility('aa_indicator_green', false)
 
     self.bar_background = images.new(images_setup)
     self.bar_background_left = images.new(images_setup)
@@ -370,7 +438,7 @@ function ui:load(theme_options)
             self.hotbars[h].slot_text[i] = texts.new(text_setup)
             self.hotbars[h].slot_cost[i] = texts.new(right_text_setup)
             self.hotbars[h].slot_recast_text[i] = texts.new(right_text_setup)
-            self.hotbars[h].slot_icon[i]:size(30, 30)
+            self.hotbars[h].slot_icon[i]:size(40, 40)
 
             setup_image(self.hotbars[h].slot_background[i], windower.addon_path..'/themes/' .. (theme_options.slot_theme:lower()) .. '/slot.png')
             setup_image(self.hotbars[h].slot_icon[i], windower.addon_path .. '/images/' .. get_icon_pathbase() .. '/ui/blank.png')
@@ -523,7 +591,6 @@ function ui:show(player_hotbar, environment)
             if self.theme.hide_action_names == false then self.hotbars[h].slot_text[i]:show() end
             if self.theme.hide_action_cost == false then self.hotbars[h].slot_cost[i]:show() end
             if self.theme.hide_recast_text == false then self.hotbars[h].slot_recast_text[i]:show() end
-            -- if self.theme.hide_empty_slots == false then self.hotbars[h].slot_key[i]:show() end
         end
     end
 end
@@ -587,11 +654,8 @@ function ui:load_player_hotbar(player_hotbar, player_vitals, environment, gamepa
 
     for h=1,self.theme.hotbar_number,1 do
         local isThisBarActive = gamepad_state.active_bar == h
-        -- print(h)
-        local isThisBarVisibleByDefault = h < 3 or h > 4
-        -- local isThisBarVisibleByDefault = h < 3
-        local shouldDrawDefaultVisibleBars = gamepad_state.active_bar < 3 or gamepad_state.active_bar > 4
-        -- local shouldDrawDefaultVisibleBars = gamepad_state.active_bar < 3
+        local isThisBarVisibleByDefault = h < 3 
+        local shouldDrawDefaultVisibleBars = gamepad_state.active_bar < 3
         local shouldDrawThisBar = isThisBarActive or isThisBarVisibleByDefault and shouldDrawDefaultVisibleBars
         for slot=1,8,1 do
             local action = nil
@@ -642,49 +706,65 @@ function ui:load_action(player_hotbar, environment, hotbar, slot, action, player
 
     local icon_path = nil
 
-    -- if slot has a skill (ma, ja or ws)
-    if action.type == 'ma' or action.type == 'ja' or action.type == 'ws' or action.type == 'enchanteditem' or action.type == 'pet' then
+    -- Metadata lookup keys. When action.linked_type / linked_action are set
+    -- (e.g. a type='ex' gear-swap command linking to a real spell), these
+    -- override action.type / action.action for the purposes of deciding
+    -- which resource table to query and what name to look up — so MP/TP
+    -- cost, element indicator, and recast timer render as if the linked
+    -- spell/ability was directly bound, while the actual command that
+    -- fires (action.action) remains the user's raw command.
+    local lookup_type = action.linked_type or action.type
+    local lookup_name = action.linked_action or action.action
+
+    -- if slot has a skill (ma, ja or ws) — or is linked to one
+    if lookup_type == 'ma' or lookup_type == 'ja' or lookup_type == 'ws' or lookup_type == 'enchanteditem' or lookup_type == 'pet' then
         local crossbar_action = nil
 
-        if (action.type == 'ma' or action.type == 'ja' or action.type == 'pet' or action.type == 'ws') then
-            if (action.type == 'ma') then
-                crossbar_action = crossbar_spells[kebab_casify(action.action)]
+        if (lookup_type == 'ma' or lookup_type == 'ja' or lookup_type == 'pet' or lookup_type == 'ws') then
+            if (lookup_type == 'ma') then
+                crossbar_action = crossbar_spells[kebab_casify(lookup_name)]
             else
-                crossbar_action = crossbar_abilities[kebab_casify(action.action)]
+                crossbar_action = crossbar_abilities[kebab_casify(lookup_name)]
             end
 
-            -- print(action.action)
-            icon_path, icon_overridden = maybe_get_custom_icon(crossbar_action.default_icon, crossbar_action.custom_icon)
+            -- Guard against a typo or unknown linked_action name — without
+            -- this, accessing fields on a nil crossbar_action below would
+            -- crash the render loop for that slot.
+            if crossbar_action ~= nil then
+                icon_path, icon_overridden = maybe_get_custom_icon(crossbar_action.default_icon, crossbar_action.custom_icon)
 
-            -- display element
-            if self:should_show_element(crossbar_action.element) then
-                self.hotbars[hotbar].slot_element[slot]:path(windower.addon_path .. '/images/icons/elements/' .. crossbar_action.element .. '.png')
-                if (show_when_ready) then
-                    self.hotbars[hotbar].slot_element[slot]:show()
+                -- display element
+                if self:should_show_element(crossbar_action.element) then
+                    self.hotbars[hotbar].slot_element[slot]:path(windower.addon_path .. '/images/icons/elements/' .. crossbar_action.element .. '.png')
+                    if (show_when_ready) then
+                        self.hotbars[hotbar].slot_element[slot]:show()
+                    end
                 end
-            end
 
-            -- display mp cost
-            if crossbar_action.mp_cost ~= nil and crossbar_action.mp_cost ~= 0 then
-                self.hotbars[hotbar].slot_cost[slot]:color(self.theme.mp_cost_color_red, self.theme.mp_cost_color_green, self.theme.mp_cost_color_blue)
-                self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.mp_cost))
+                -- display mp cost
+                if crossbar_action.mp_cost ~= nil and crossbar_action.mp_cost ~= 0 then
+                    self.hotbars[hotbar].slot_cost[slot]:color(self.theme.mp_cost_color_red, self.theme.mp_cost_color_green, self.theme.mp_cost_color_blue)
+                    self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.mp_cost))
 
-                if player_vitals.mp < crossbar_action.mp_cost then
-                    self.disabled_slots.no_vitals[action.action] = true
-                    is_disabled = true
-                end
-            -- display tp cost
-            elseif crossbar_action.tp_cost ~= nil and crossbar_action.tp_cost ~= 0 then
-                self.hotbars[hotbar].slot_cost[slot]:color(self.theme.tp_cost_color_red, self.theme.tp_cost_color_green, self.theme.tp_cost_color_blue)
-                self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.tp_cost))
+                    if player_vitals.mp < crossbar_action.mp_cost then
+                        self.disabled_slots.no_vitals[action.action] = true
+                        is_disabled = true
+                    end
+                -- display tp cost
+                elseif crossbar_action.tp_cost ~= nil and crossbar_action.tp_cost ~= 0 then
+                    self.hotbars[hotbar].slot_cost[slot]:color(self.theme.tp_cost_color_red, self.theme.tp_cost_color_green, self.theme.tp_cost_color_blue)
+                    self.hotbars[hotbar].slot_cost[slot]:text(tostring(crossbar_action.tp_cost))
 
-                if player_vitals.tp < crossbar_action.tp_cost then
-                    self.disabled_slots.no_vitals[action.action] = true
-                    is_disabled = true
+                    if player_vitals.tp < crossbar_action.tp_cost then
+                        self.disabled_slots.no_vitals[action.action] = true
+                        is_disabled = true
+                    end
                 end
             end
         end
 
+        -- Enchanted-item special handling uses the raw action, not the
+        -- linked lookup — don't try linked_type='enchanteditem'
         if (action.type == 'enchanteditem') then
             self.enchanted_items:register(action.action, action.warmup, 2, action.cooldown)
             self.hotbars[hotbar].slot_icon[slot]:pos(self:get_slot_x(hotbar, slot), self:get_slot_y(hotbar, slot))
@@ -826,11 +906,17 @@ function ui:check_vitals(player_hotbar, player_vitals, environment)
                 local crossbar_action = nil
                 local is_disabled = false
 
+                -- Honor linked_type / linked_action for the metadata lookup
+                -- (MP/TP affordability, recast keying). See display_slot for
+                -- the full rationale.
+                local lookup_type = action.linked_type or action.type
+                local lookup_name = action.linked_action or action.action
+
                 -- if its magic, look for it in spells
-                if (action.type == 'ma') then
-                    crossbar_action = crossbar_spells[kebab_casify(action.action)]
-                elseif (action.type == 'ja' or action.type == 'ws') then
-                    crossbar_action = crossbar_abilities[kebab_casify(action.action)]
+                if (lookup_type == 'ma') then
+                    crossbar_action = crossbar_spells[kebab_casify(lookup_name)]
+                elseif (lookup_type == 'ja' or lookup_type == 'ws') then
+                    crossbar_action = crossbar_abilities[kebab_casify(lookup_name)]
                 end
 
                 if (crossbar_action ~= nil) then
@@ -861,6 +947,83 @@ function ui:check_vitals(player_hotbar, player_vitals, environment)
 end
 
 local skillchain_indicator_state = ''
+gcd_start_time = 0
+gcd_duration = 2.8
+gcd_active = false
+gcd_kind = 'spell' -- one of: 'spell' (3.0s, bluish-white → green at end),
+                  --         'ws'    (2.0s, amber),
+                  --         'ja'    (2.0s, red for first 1.0s then green)
+
+-- Auto-attack swing timer state.
+aa_last_swing_time = 0
+aa_intervals = {}              -- up to 10 most recent inter-swing intervals (active seconds)
+aa_estimate = nil              -- rolling average (nil until first swing recorded)
+aa_engaged = false             -- whether the player is currently engaged
+aa_pause_sources = {}          -- set: {ws=true, ja=true, petrify=true, ...}
+aa_pause_start = 0             -- os.clock() when current pause began (0 if not paused)
+aa_accumulated_pause = 0       -- total paused seconds since last swing
+aa_fallback_total = 10         -- total bar duration when no data yet (seconds)
+
+function aa_is_paused()
+    return next(aa_pause_sources) ~= nil
+end
+
+function aa_add_pause_source(src)
+    if (not aa_is_paused()) then
+        aa_pause_start = os.clock()
+    end
+    aa_pause_sources[src] = true
+end
+
+function aa_remove_pause_source(src)
+    if (aa_pause_sources[src] == nil) then return end
+    aa_pause_sources[src] = nil
+    if (not aa_is_paused()) then
+        aa_accumulated_pause = aa_accumulated_pause + (os.clock() - aa_pause_start)
+        aa_pause_start = 0
+    end
+end
+
+function aa_clear_pauses()
+    aa_pause_sources = {}
+    aa_pause_start = 0
+end
+
+function aa_record_swing()
+    local now = os.clock()
+    if (aa_last_swing_time > 0) then
+        local interval = (now - aa_last_swing_time) - aa_accumulated_pause
+        if (interval > 0) then
+            table.insert(aa_intervals, interval)
+            while (#aa_intervals > 10) do
+                table.remove(aa_intervals, 1)
+            end
+            local sum = 0
+            for _, v in ipairs(aa_intervals) do sum = sum + v end
+            aa_estimate = sum / #aa_intervals
+        end
+    end
+    aa_last_swing_time = now
+    aa_accumulated_pause = 0
+    aa_clear_pauses()
+end
+
+function aa_set_engaged(is_engaged)
+    if (is_engaged and not aa_engaged) then
+        -- just engaged: reset timing state but KEEP the intervals history
+        aa_last_swing_time = os.clock()
+        aa_accumulated_pause = 0
+        aa_clear_pauses()
+    end
+    aa_engaged = is_engaged
+end
+
+-- Schedule function for clearing a pause source after a fixed delay (2s for WS/JA).
+function aa_clear_pause_after(src, delay_seconds)
+    coroutine.schedule(function()
+        aa_remove_pause_source(src)
+    end, delay_seconds)
+end
 
 function ui:display_skillchain_indicator(player_vitals, skillchain_delay, skillchain_window)
     local target = windower.ffxi.get_mob_by_target('t', 'bt')
@@ -915,6 +1078,193 @@ function ui:display_skillchain_indicator(player_vitals, skillchain_delay, skillc
     end
 end
 
+function ui:display_gcd_indicator()
+    if gcd_active then
+        local elapsed = os.clock() - gcd_start_time
+        local remaining = gcd_duration - elapsed
+
+        if remaining > 0 then
+            local fraction = remaining / gcd_duration
+            local base_width = math.round(600 * fraction)
+            local left_spacer = math.round(300 * (1 - fraction))
+
+            local alpha, cr, cg, cb
+            if gcd_kind == 'ws' then
+                alpha = self.theme.ws_lockout_opacity
+                cr = self.theme.ws_lockout_primary_red
+                cg = self.theme.ws_lockout_primary_green
+                cb = self.theme.ws_lockout_primary_blue
+            elseif gcd_kind == 'ja' then
+                alpha = self.theme.ja_lockout_opacity
+                if elapsed < 1.0 then
+                    cr = self.theme.ja_lockout_full_red
+                    cg = self.theme.ja_lockout_full_green
+                    cb = self.theme.ja_lockout_full_blue
+                else
+                    cr = self.theme.ja_lockout_partial_red
+                    cg = self.theme.ja_lockout_partial_green
+                    cb = self.theme.ja_lockout_partial_blue
+                end
+            else
+                alpha = self.theme.spell_lockout_opacity
+                if fraction < 0.15 then
+                    cr = self.theme.spell_lockout_ending_red
+                    cg = self.theme.spell_lockout_ending_green
+                    cb = self.theme.spell_lockout_ending_blue
+                else
+                    cr = self.theme.spell_lockout_primary_red
+                    cg = self.theme.spell_lockout_primary_green
+                    cb = self.theme.spell_lockout_primary_blue
+                end
+            end
+
+            if alpha == 0 then
+                -- Per-mode opacity 0 = hide this mode's bar entirely.
+                windower.prim.set_visibility('gcd_indicator', false)
+                windower.prim.set_visibility('gcd_indicator_bg', false)
+                return
+            end
+
+            windower.prim.set_color('gcd_indicator', alpha, cr, cg, cb)
+
+            local effective_y_offset = self.gcd_offset_y
+            if not self.is_compact then
+                effective_y_offset = effective_y_offset + self.hotbar_spacing
+            end
+
+            windower.prim.set_size('gcd_indicator', base_width, 6)
+            windower.prim.set_position(
+                'gcd_indicator',
+                left_spacer + self:get_slot_x(1, 1) - 10 + self.gcd_offset_x,
+                self:get_slot_y(1, 4) + effective_y_offset
+            )
+            windower.prim.set_visibility('gcd_indicator', true)
+
+            windower.prim.set_size('gcd_indicator_bg', base_width + 4, 10)
+            windower.prim.set_position(
+                'gcd_indicator_bg',
+                left_spacer + self:get_slot_x(1, 1) - 12 + self.gcd_offset_x,
+                self:get_slot_y(1, 4) + effective_y_offset - 2
+            )
+            windower.prim.set_visibility('gcd_indicator_bg', true)
+        else
+            gcd_active = false
+            windower.prim.set_visibility('gcd_indicator', false)
+            windower.prim.set_visibility('gcd_indicator_bg', false)
+        end
+    else
+        windower.prim.set_visibility('gcd_indicator', false)
+        windower.prim.set_visibility('gcd_indicator_bg', false)
+    end
+end
+
+-- Hide all three auto-attack bar primitives.
+function ui:hide_aa_indicator()
+    windower.prim.set_visibility('aa_indicator_red', false)
+    windower.prim.set_visibility('aa_indicator_green', false)
+    windower.prim.set_visibility('aa_indicator_bg', false)
+end
+
+function ui:display_aa_indicator()
+    if (not aa_engaged or aa_last_swing_time == 0) then
+        self:hide_aa_indicator()
+        return
+    end
+
+    -- Opacity 0 is the AA bar's kill switch — bail before any rendering.
+    if (self.theme.aa_opacity == 0) then
+        self:hide_aa_indicator()
+        return
+    end
+
+    -- Active elapsed time = wall-clock elapsed minus accumulated pauses
+    -- (and minus any in-progress pause).
+    local wall_elapsed = os.clock() - aa_last_swing_time
+    local pause_so_far = aa_accumulated_pause
+    if (aa_is_paused()) then
+        pause_so_far = pause_so_far + (os.clock() - aa_pause_start)
+    end
+    local active_elapsed = wall_elapsed - pause_so_far
+    if (active_elapsed < 0) then active_elapsed = 0 end
+
+    -- Determine total bar duration and the estimate cutoff.
+    local total_duration
+    local estimate_cut
+    if (aa_estimate == nil) then
+        total_duration = aa_fallback_total
+        estimate_cut = aa_fallback_total  -- entire bar is red when no data
+    else
+        total_duration = 1.5 * aa_estimate
+        estimate_cut = aa_estimate
+    end
+
+    if (active_elapsed >= total_duration) then
+        -- Timer has run beyond the visible window (stuck, no swings happening).
+        self:hide_aa_indicator()
+        return
+    end
+
+    -- How much of the original red/green portions remains (in seconds).
+    local red_remaining = estimate_cut - active_elapsed
+    if (red_remaining < 0) then red_remaining = 0 end
+    local green_total = total_duration - estimate_cut  -- original green segment length
+    local green_shrink = active_elapsed - estimate_cut  -- how much of the green has been "consumed" if we're past the estimate
+    if (green_shrink < 0) then green_shrink = 0 end
+    local green_remaining = green_total - green_shrink
+    if (green_remaining < 0) then green_remaining = 0 end
+
+    -- Width in pixels (600 total, matches GCD/skillchain bar scale).
+    local red_px = math.round(600 * (red_remaining / total_duration))
+    local green_px = math.round(600 * (green_remaining / total_duration))
+    local visible_px = red_px + green_px
+    if (visible_px <= 0) then
+        self:hide_aa_indicator()
+        return
+    end
+
+    -- Symmetric contraction: compute left edge so the combined bar is centered.
+    local left_spacer = math.round((600 - visible_px) / 2)
+    local base_x = self:get_slot_x(1, 1) - 10 + self.aa_offset_x
+    local effective_y_offset = self.aa_offset_y
+    if not self.is_compact then
+        effective_y_offset = effective_y_offset + self.hotbar_spacing
+    end
+    local base_y = self:get_slot_y(1, 4) + effective_y_offset
+    local red_x = left_spacer + base_x
+    local green_x = red_x + red_px
+
+    -- Alpha and color come from settings. PausedOpacity / PausedBackgroundOpacity
+    -- apply when WS/JA/debuff freezes the timer (gives a dimmed look so the
+    -- user can tell at a glance that the bar is frozen).
+    local alpha = aa_is_paused() and self.theme.aa_paused_opacity or self.theme.aa_opacity
+    local bg_alpha = aa_is_paused() and self.theme.aa_paused_background_opacity or self.theme.aa_background_opacity
+    windower.prim.set_color('aa_indicator_red', alpha,
+        self.theme.aa_before_red, self.theme.aa_before_green, self.theme.aa_before_blue)
+    windower.prim.set_color('aa_indicator_green', alpha,
+        self.theme.aa_past_red, self.theme.aa_past_green, self.theme.aa_past_blue)
+    windower.prim.set_color('aa_indicator_bg', bg_alpha, 0, 0, 0)
+
+    if (red_px > 0) then
+        windower.prim.set_size('aa_indicator_red', red_px, 6)
+        windower.prim.set_position('aa_indicator_red', red_x, base_y)
+        windower.prim.set_visibility('aa_indicator_red', true)
+    else
+        windower.prim.set_visibility('aa_indicator_red', false)
+    end
+
+    if (green_px > 0) then
+        windower.prim.set_size('aa_indicator_green', green_px, 6)
+        windower.prim.set_position('aa_indicator_green', green_x, base_y)
+        windower.prim.set_visibility('aa_indicator_green', true)
+    else
+        windower.prim.set_visibility('aa_indicator_green', false)
+    end
+
+    windower.prim.set_size('aa_indicator_bg', visible_px + 4, 10)
+    windower.prim.set_position('aa_indicator_bg', red_x - 2, base_y - 2)
+    windower.prim.set_visibility('aa_indicator_bg', true)
+end
+
 local last_log = os.clock()
 
 function ui:mark_default_set_action(h, i, environment)
@@ -940,6 +1290,8 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
 
     local skillchain_delay, skillchain_window = skillchains.get_skillchain_window()
     self:display_skillchain_indicator(player_vitals, skillchain_delay, skillchain_window)
+    self:display_gcd_indicator()
+    self:display_aa_indicator()
 
     if (gamepad_state.active_bar ~= 0) then
         self:show_bar_background(gamepad_state.active_bar)
@@ -990,7 +1342,6 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                         self.hotbars[h].slot_icon[i]:path(windower.addon_path..'/images/' .. get_icon_pathbase() .. '/attack.png')
                         self.hotbars[h].slot_text[i]:text('Attack')
                     end
-                    self.hotbars[h].slot_icon[i]:pos(self:get_slot_x(h, i), self:get_slot_y(h, i))
                 elseif (action ~= nil and action.type == 'ta' and action.action == 'Switch Target' and action.alias == 'Switch Target') then
                     if (in_battle) then
                         self.hotbars[h].slot_icon[i]:path(windower.addon_path..'/images/' .. get_icon_pathbase() .. '/switchtarget.png')
@@ -999,13 +1350,16 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                         self.hotbars[h].slot_icon[i]:path(windower.addon_path..'/images/' .. get_icon_pathbase() .. '/targetnpc.png')
                         self.hotbars[h].slot_text[i]:text('Target NPC')
                     end
-                    self.hotbars[h].slot_icon[i]:pos(self:get_slot_x(h, i), self:get_slot_y(h, i))
                 elseif (action ~= nil and action.type == 'map') then
                     self.hotbars[h].slot_icon[i]:path(windower.addon_path..'/images/' .. get_icon_pathbase() .. '/map.png')
-                    self.hotbars[h].slot_icon[i]:pos(self:get_slot_x(h, i), self:get_slot_y(h, i))
                 end
 
-                if action == nil or (action.type ~= 'ma' and action.type ~= 'ja' and action.type ~= 'ws' and action.type ~= 'pet' and action.type ~= 'enchanteditem') then
+                -- Honor linked_type so an action that LINKS to a spell/ability/WS
+                -- enters the recast-tracking branch below even though its own
+                -- type is e.g. 'ex' (gear-swap command). Without this the gate
+                -- bails before the recast code can look up the linked metadata.
+                local effective_type = action and (action.linked_type or action.type) or nil
+                if action == nil or (effective_type ~= 'ma' and effective_type ~= 'ja' and effective_type ~= 'ws' and effective_type ~= 'pet' and effective_type ~= 'enchanteditem') then
                     self:clear_recast(h, i)
                     if (action ~= nil and action.type == 'item') then
                         local item_count = consumables:get_item_count_by_name(action.action)
@@ -1039,12 +1393,19 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
 
                     local skillchain_prop = nil
 
+                    -- Honor linked_type / linked_action for metadata lookup.
+                    -- action.action still drives the ninja-tool / COR-gun
+                    -- special cases below because those are tied to the
+                    -- actual command text, not the linked reference.
+                    local lookup_type = action.linked_type or action.type
+                    local lookup_name = action.linked_action or action.action
+
                     -- if its magic, look for it in spells
-                    if action.type == 'ma' then
-                        crossbar_action = crossbar_spells[kebab_casify(action.action)]
+                    if lookup_type == 'ma' then
+                        crossbar_action = crossbar_spells[kebab_casify(lookup_name)]
                         if (crossbar_action ~= nil) then
                             skill_recasts = windower.ffxi.get_spell_recasts()
-                            has_spell = crossbar_action.category ~= "blue magic" or spells[(action.action):lower()]
+                            has_spell = crossbar_action.category ~= "blue magic" or spells[(lookup_name):lower()]
 
                             if (player.main_job == 'NIN' or player.sub_job == 'NIN') then
                                 local tool_info = consumables:get_ninja_spell_info(crossbar_action.id)
@@ -1082,13 +1443,13 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                                 end
                             end
                         end
-                    elseif (action.type == 'ja' or action.type == 'ws' or action.type == 'pet') then
-                        crossbar_action = crossbar_abilities[kebab_casify(action.action)]
+                    elseif (lookup_type == 'ja' or lookup_type == 'ws' or lookup_type == 'pet') then
+                        crossbar_action = crossbar_abilities[kebab_casify(lookup_name)]
                         if (crossbar_action ~= nil) then
-                            if (action.type == 'ws') then
+                            if (lookup_type == 'ws') then
                                 skillchain_prop = skillchains.get_skillchain_result(crossbar_action.id, 'weapon_skills')
 
-                            elseif (action.type == 'ja' or action.type == 'pet') then
+                            elseif (lookup_type == 'ja' or lookup_type == 'pet') then
                                 skillchain_prop = skillchains.get_skillchain_result(crossbar_action.recast_id, 'job_abilities')
 
                                 if (player.main_job == 'COR' or player.sub_job == 'COR') then
@@ -1123,25 +1484,38 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                                 end
 
                                 if (player.main_job == 'SCH' or player.sub_job == 'SCH') then
+                                    -- Stratagem charges scale with SCH level: 1 charge at 10, then
+                                    -- +1 every 20 levels through 99 (5 max). +1 gift unlocks at 550 JP.
+                                    -- The map's keys correspond to total-charges values; indexing it with
+                                    -- 0 or a value outside [1,6] yields nil and crashes the divide below.
                                     local strat_charge_time = {[1]=240,[2]=120,[3]=80,[4]=60,[5]=48,[6]=33}
                                     local level = nil
                                     if player.main_job == 'SCH' then
                                         level = player.main_job_level
                                     elseif player.sub_job == 'SCH' then
-                                        level = player.sub_job_leel
+                                        level = player.sub_job_level
                                     end
 
-                                    if level ~= nil then
+                                    -- If you login as a SCH, or if you switch into a low-level SCH that 
+                                    -- has no stratagem count, the addon would have crashed previously.
+                                    if (level ~= nil and level >= 10) then
                                         local max = math.floor(((level - 10) / 20) + 1)
                                         local gift = 0
-                                        if player.main_job == 'SCH' and player.sch_jp_spent >= 550 then
+                                        local jp_spent = player.sch_jp_spent or 0
+                                        if (player.main_job == 'SCH' and jp_spent >= 550) then
                                             gift = 1
                                         end
-                                        local recastTime = windower.ffxi.get_ability_recasts()[231] or 0
-                                        local used = (recastTime/strat_charge_time[max+gift]):ceil()
-                                        local display_count =  tostring(max - used)
-                                        if consumables:get_strategem_required(action.action) then
-                                            self.hotbars[h].slot_cost[i]:text(display_count)
+                                        -- Clamp the final lookup index to the valid range as a
+                                        -- final safety net (e.g. unexpected levels above 99).
+                                        local idx = math.max(1, math.min(6, max + gift))
+                                        local charge_time = strat_charge_time[idx]
+                                        if (charge_time ~= nil and charge_time > 0) then
+                                            local recastTime = windower.ffxi.get_ability_recasts()[231] or 0
+                                            local used = (recastTime / charge_time):ceil()
+                                            local display_count = tostring(max - used)
+                                            if consumables:get_strategem_required(action.action) then
+                                                self.hotbars[h].slot_cost[i]:text(display_count)
+                                            end
                                         end
                                     end
                                 end
@@ -1322,7 +1696,7 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                         self.hotbars[h].slot_frame[i]:path(self.frame_image_path)
                         self.hotbars[h].slot_icon[i]:show()
                         self.hotbars[h].slot_warmup[i]:hide()
-                        if (action.type == 'ws') then
+                        if (action.type == 'ws' or action.linked_type == 'ws') then
                             self.hotbars[h].slot_cost[i]:show()
                         end
                     end
@@ -1334,7 +1708,7 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                 end
             end
 
-            if (not self.is_compact or self.UseAltLayout) then
+            if (not self.is_compact) then
                 self:show_controller_icons(h)
             end
         else
@@ -1408,11 +1782,6 @@ function ui:show_controller_icons(h)
             self.hotbars[h].slot_recast[faceSlot]:show()
 
         end
-
-        -- if h == 2 or h == 6 then
-        --     self.hotbars[h].slot_recast[faceSlot]:pos(self:get_slot_x(h, faceSlot - 0.5), self:get_slot_y(h, 2) + 20)
-        --     self.hotbars[h].slot_recast[faceSlot]:show()
-        -- end
     end
 end
 
@@ -1484,6 +1853,8 @@ function ui:maybe_use_enchanted_item(hotbar, slot)
 end
 
 function maybe_get_default_action(hotbar, environment, hb, slot)
+    if (environment == 'shared') then return nil end
+
     local h = 'hotbar_' .. hb
     local i = 'slot_' .. slot
     local action = nil

@@ -1,37 +1,9 @@
---[[    BSD License Disclaimer
-        Copyright © 2017, SirEdeonX
-        All rights reserved.
-
-        Redistribution and use in source and binary forms, with or without
-        modification, are permitted provided that the following conditions are met:
-
-            * Redistributions of source code must retain the above copyright
-              notice, this list of conditions and the following disclaimer.
-            * Redistributions in binary form must reproduce the above copyright
-              notice, this list of conditions and the following disclaimer in the
-              documentation and/or other materials provided with the distribution.
-            * Neither the name of xivcrossbar nor the
-              names of its contributors may be used to endorse or promote products
-              derived from this software without specific prior written permission.
-
-        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-        ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-        WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-        DISCLAIMED. IN NO EVENT SHALL SirEdeonX BE LIABLE FOR ANY
-        DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-        (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-        ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-        SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-]]
-
 -- Addon description
-_addon.name = 'XIV Crossbar' -- based on Edeon's XIV Hotbar
-_addon.author = 'Aliekber, Aeliya'
-_addon.version = '0.2'
+_addon.name = 'XIVCrossbar' -- based on Edeon's XIV Hotbar
+_addon.author = 'Aliekber, Aeliya, GrayFox2510'
+_addon.version = '0.3'
 _addon.language = 'english'
-_addon.commands = {'xivcrossbar', 'xb'}
+_addon.commands = {'xivcrossbar', 'xb', 'xcb'}
 
 -- Libs
 res = require 'resources'
@@ -99,35 +71,47 @@ local function close_right_doublepress_window()
 end
 
 -- command to set a crossbar action in action_binder
-function set_hotkey(hotbar, slot, action_type, action, target, command, icon)
+function set_hotkey(hotbar, slot, action_type, action, target, command, icon, linked_action, linked_type, explicit_alias)
     local environment = player.hotbar_settings.active_environment
 
-    local alias = nil
-    if (action == 'Ranged Attack') then
-        action = 'ra'
-        alias = 'Ranged Attack'
-        icon = 'ranged'
-    elseif (action == 'Attack') then
-        action = 'a'
-        alias = 'Attack'
-        icon = 'attack'
-    elseif (action_type == 'assist') then
-        action_type = 'ct'
-        alias = action
-        action = action:lower()
-        icon = 'assist'
-    elseif (action == 'Last Synth') then
-        action = 'lastsynth'
-        alias = 'Last Synth'
-        icon = 'synth'
+    -- Custom-action bindings provide their own alias/linked metadata from the
+    -- CustomActions.xml catalog, so the legacy name-based special cases below
+    -- (which exist for the Attack / Ranged Attack / Assist / Last Synth
+    -- categories) must not run — otherwise a custom action named "Attack"
+    -- would get stomped. explicit_alias being non-nil is the signal that
+    -- the caller knows exactly what it wants.
+    local is_custom_action = (explicit_alias ~= nil or linked_action ~= nil or linked_type ~= nil)
+
+    local alias = explicit_alias
+    if (not is_custom_action) then
+        if (action == 'Ranged Attack') then
+            action = 'ra'
+            alias = 'Ranged Attack'
+            icon = 'ranged'
+        elseif (action == 'Attack') then
+            action = 'a'
+            alias = 'Attack'
+            icon = 'attack'
+        elseif (action_type == 'assist') then
+            action_type = 'ct'
+            alias = action
+            action = action:lower()
+            icon = 'assist'
+        elseif (action == 'Last Synth') then
+            action = 'lastsynth'
+            alias = 'Last Synth'
+            icon = 'synth'
+        end
     end
 
     if (command ~= nil) then
-        alias = action
+        -- If no explicit alias was provided, fall back to the human-readable
+        -- action name being replaced by the raw command (existing behavior).
+        if (alias == nil) then alias = action end
         action = command
     end
 
-    local new_action = action_manager:build(action_type, action, target, alias, icon)
+    local new_action = action_manager:build(action_type, action, target, alias, icon, nil, nil, nil, nil, linked_action, linked_type)
     player:add_action(new_action, environment, hotbar, slot)
     player:save_hotbar()
     reload_hotbar()
@@ -148,16 +132,112 @@ function get_crossbar_sets()
     return player:get_crossbar_names()
 end
 
-function start_controller_wrappers()
-    -- only one of these is ever needed at a time, but there's no harm in running both
-    if (settings.controllermode == 1) then
-        windower.send_command('run addons/xivcrossbar/ffxi_directinput.ahk')
-    elseif (settings.controllermode == 2) then
-        windower.send_command('run addons/xivcrossbar/ffxi_xinput.ahk')
-    else
-        windower.send_command('run addons/xivcrossbar/ffxi_directinput.ahk')
-        windower.send_command('run addons/xivcrossbar/ffxi_xinput.ahk')
+-- Change Icon callback: replaces the icon of an already-bound slot, persists
+-- the hotbar XML, and reloads so the new icon shows immediately. Wired into
+-- action_binder.lua's :setup().
+--   hotbar_num: 1-6 (which trigger combo: L/R/RL/LR/LL/RR)
+--   slot_num: 1-8 (which face button or d-pad direction)
+-- Operates on the currently-active environment.
+function change_slot_icon(hotbar_num, slot_num, icon)
+    if (hotbar_num == nil or slot_num == nil) then return end
+
+    local environment = player.hotbar_settings.active_environment
+    local updated = player:set_slot_icon(environment, hotbar_num, slot_num, icon)
+    if (not updated) then
+        windower.add_to_chat(123, '[XIVCrossbar] Change Icon: no action bound at the selected slot.')
+        return
     end
+
+    player:save_hotbar()
+    reload_hotbar()
+    set_active_environment(player.hotbar_settings.active_environment)
+end
+
+-- Global Icon Set callback: writes a SharedIcons.xml entry pairing an action
+-- name with an icon path. After save, the SharedIcons fallback layer applies
+-- the new icon to every slot in every job that matches the name (by alias or
+-- action text). Wired into action_binder.lua's :setup().
+function save_global_icon(name, icon)
+    if (name == nil or name == '' or icon == nil or icon == '') then
+        windower.add_to_chat(123, '[XIVCrossbar] Global Icon Set: missing name or icon.')
+        return
+    end
+
+    player.shared_icons[name] = icon
+    player:save_shared_icons_file()
+    reload_hotbar()
+    set_active_environment(player.hotbar_settings.active_environment)
+
+    windower.add_to_chat(123, '[XIVCrossbar] Global icon set: "' .. name .. '" -> ' .. icon)
+end
+
+-- Create Custom Action callback: persists a CustomActions.xml entry from a
+-- record built up during the binder's create-flow. The record is the same
+-- shape we read back via load_custom_actions: {name, alias, command, icon,
+-- linked_action, linked_type}.
+function save_custom_action(record)
+    if (record == nil or record.name == nil or record.name == '') then
+        windower.add_to_chat(123, '[XIVCrossbar] Create Custom Action: missing name.')
+        return
+    end
+    -- Update in-memory catalog and persist.
+    player.custom_actions[record.name] = {
+        command       = record.command,
+        alias         = record.alias,
+        icon          = record.icon,
+        linked_action = record.linked_action,
+        linked_type   = record.linked_type,
+    }
+    player:save_custom_actions_file()
+    -- No reload needed for the catalog itself — the binder's existing
+    -- "Custom Action" selector pulls from player.custom_actions in real time.
+    windower.add_to_chat(123, '[XIVCrossbar] Custom action saved: "' .. record.name .. '"')
+end
+
+-- Edit Custom Action callback: persists changes to an existing entry,
+-- handling rename by removing the old key before writing the new one. The
+-- binder has already chat-warned the user about orphaned slot bindings if
+-- the name changed.
+function update_custom_action(original_name, record)
+    if (record == nil or record.name == nil or record.name == '') then
+        windower.add_to_chat(123, '[XIVCrossbar] Edit Custom Action: missing name.')
+        return
+    end
+    if (original_name ~= nil and original_name ~= record.name) then
+        player.custom_actions[original_name] = nil
+    end
+    player.custom_actions[record.name] = {
+        command       = record.command,
+        alias         = record.alias,
+        icon          = record.icon,
+        linked_action = record.linked_action,
+        linked_type   = record.linked_type,
+    }
+    player:save_custom_actions_file()
+    windower.add_to_chat(123, '[XIVCrossbar] Custom action updated: "' .. record.name .. '"')
+end
+
+-- Delete Custom Action callback: removes an entry from the catalog and
+-- rewrites CustomActions.xml. Slots that reference the deleted name are
+-- left as-is; user is responsible for cleaning those up.
+function delete_custom_action(name)
+    if (name == nil or name == '') then
+        windower.add_to_chat(123, '[XIVCrossbar] Delete Custom Action: missing name.')
+        return
+    end
+    if (player.custom_actions == nil or player.custom_actions[name] == nil) then
+        windower.add_to_chat(123, '[XIVCrossbar] Delete Custom Action: entry "' .. name .. '" not found.')
+        return
+    end
+    player.custom_actions[name] = nil
+    player:save_custom_actions_file()
+    windower.add_to_chat(123, '[XIVCrossbar] Custom action deleted: "' .. name .. '". Existing slot bindings referencing it will not be auto-removed.')
+end
+
+function start_controller_wrappers()
+    -- windower.send_command('run addons/xivcrossbar/ffxi_directinput.ahk')
+    -- windower.send_command('run addons/xivcrossbar/ffxi_input_diagnostic.ahk')
+    windower.send_command('run addons/xivcrossbar/ffxi_xinput.ahk')
 end
 
 -- initialize addon
@@ -170,15 +250,9 @@ function initialize()
 
     if windower_player == nil then return end
 
-    if (settings.below1080) then
-        y_adjust = 250
-    else
-        y_adjust = 450
-    end
-
     if (buttonmapping.validate()) then
         theme_options.button_layout = buttonmapping.button_layout
-        action_binder:setup(buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - y_adjust)
+        action_binder:setup(buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action)
     else
         theme_options.button_layout = 'nintendo'
         local temp_buttonmapping = {}
@@ -186,9 +260,9 @@ function initialize()
         theme_options.cancel_button = 'b'
         theme_options.mainmanu_button = 'y'
         theme_options.activewindow_button = 'x'
-        gamepad_mapper:setup(buttonmapping, start_controller_wrappers, theme_options, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - y_adjust)
+        gamepad_mapper:setup(buttonmapping, start_controller_wrappers, theme_options, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450)
         gamepad_mapper:show(true)
-        action_binder:setup(temp_buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - y_adjust)
+        action_binder:setup(temp_buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action)
     end
 
     player:initialize(windower_player, server, theme_options, enchanted_items)
@@ -213,6 +287,9 @@ function initialize()
     env_chooser:setup(theme_options)
     gamepad_converter:setup(theme_options.button_layout)
 
+    local current_status = windower.ffxi.get_player().status
+    aa_set_engaged(current_status == 1 or current_status == 3)
+
     xivcrossbar.ready = true
     xivcrossbar.initialized = true
 end
@@ -220,6 +297,13 @@ end
 -- trigger hotbar action
 function trigger_action(slot)
     player:execute_action(slot)
+
+    if (player.pending_env_switch ~= nil) then
+        local target = player.pending_env_switch
+        player.pending_env_switch = nil
+        set_active_environment(target)
+    end
+
     ui:trigger_feedback(player.hotbar_settings.active_hotbar, slot)
 end
 
@@ -426,6 +510,42 @@ function update_icon_command(args)
     reload_hotbar()
 end
 
+-- Custom Action field-set chat command. Forms accepted:
+--   //xivcrossbar ca <field> <value...>
+--   //xivcrossbar custom <field> <value...>
+-- Field token: a|alias, n|name, c|command. Value is everything after the
+-- field token and is rejoined with spaces (Windower splits argv on spaces).
+-- Only accepted while a Custom Action review screen is 
+-- active; otherwise the binder reports the error to chat.
+function custom_action_field_command(args)
+    if (not args[1] or not args[2]) then
+        windower.add_to_chat(123, '[XIVCrossbar] Usage: //xcb ca <a|n|c> <value>')
+        return
+    end
+
+    local field_token = args[1]:lower()
+    local field = nil
+    if (field_token == 'a' or field_token == 'alias') then
+        field = 'alias'
+    elseif (field_token == 'n' or field_token == 'name') then
+        field = 'name'
+    elseif (field_token == 'c' or field_token == 'command') then
+        field = 'command'
+    else
+        windower.add_to_chat(123, '[XIVCrossbar] Unknown field "' .. args[1] .. '". Use a|alias, n|name, or c|command.')
+        return
+    end
+
+    -- Rejoin everything past the field token to preserve internal spaces.
+    local parts = {}
+    for i = 2, #args do
+        parts[#parts + 1] = args[i]
+    end
+    local value = table.concat(parts, ' ')
+
+    action_binder:on_custom_action_field_set(field, value)
+end
+
 -- command to update action icon
 function new_environment_command(args)
     if not args[1] then
@@ -445,6 +565,161 @@ function new_environment_command(args)
     player:save_hotbar()
     reload_hotbar()
     set_active_environment(environment)
+end
+
+-- Helpers for the rename / delete environment commands. Reserved keys are
+-- the four pinned environments that the rest of the addon assumes always
+-- exist; renaming or deleting any of them would break loading and many
+-- fallback paths.
+local PROTECTED_ENV_KEYS = {
+    ['default'] = true,
+    ['job-default'] = true,
+    ['all-jobs-default'] = true,
+    ['shared'] = true,
+}
+
+-- Count slots across all loaded environments whose type is 'switch' and
+-- whose <action> equals the given kebab-cased env name. Used to warn the
+-- user about bindings that will be left dangling by a rename or delete.
+-- Only the currently-loaded job's hotbar files are scanned (other jobs'
+-- per-job XMLs aren't in memory and aren't rewritten by this command).
+local function count_switch_references(env_kebab)
+    local count = 0
+    if (player.hotbar == nil) then return 0 end
+    for env_name, env in pairs(player.hotbar) do
+        if (type(env) == 'table') then
+            for key, hotbar in pairs(env) do
+                if (type(hotbar) == 'table' and key:sub(1, 7) == 'hotbar_') then
+                    for slot_key, slot in pairs(hotbar) do
+                        if (type(slot) == 'table' and slot.type == 'switch' and slot.action == env_kebab) then
+                            count = count + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return count
+end
+
+-- Rename an existing crossbar set (environment) in the currently-loaded
+-- job's hotbar files. Re-keys player.hotbar[<old>] to player.hotbar[<new>],
+-- updates the env's `name` field, repoints the active-environment pointer
+-- if needed, and warns about any switch-type slots that still reference
+-- the old name.
+function rename_environment_command(args)
+    if (not args[1] or not args[2]) then
+        windower.add_to_chat(123, '[XIVCrossbar] Usage: //xcb rename <old name> <new name>')
+        return
+    end
+
+    -- Since there's no real way to identify multiple words for the old and new tokens,
+    -- everything but the LAST word is considered as the "old" name, and only the very 
+    -- LAST word is treated as the new name.
+    -- ex: "//xivcrossbar rn Boss Setup Solo" would rename "Boss Setup" -> "Solo".
+    local old_name = args[1]
+    local new_name = args[2]
+    if (#args > 2) then
+        local parts = {}
+        for i = 1, #args - 1 do parts[#parts + 1] = args[i] end
+        old_name = table.concat(parts, ' ')
+        new_name = args[#args]
+    end
+
+    local old_key = kebab_casify(old_name)
+    local new_key = kebab_casify(new_name)
+
+    if (PROTECTED_ENV_KEYS[old_key]) then
+        windower.add_to_chat(123, '[XIVCrossbar] Crossbar set "' .. old_name .. '" is reserved and cannot be renamed.')
+        return
+    end
+    if (PROTECTED_ENV_KEYS[new_key]) then
+        windower.add_to_chat(123, '[XIVCrossbar] Crossbar set name "' .. new_name .. '" is reserved.')
+        return
+    end
+    if (old_key == new_key) then
+        windower.add_to_chat(123, '[XIVCrossbar] New name resolves to the same key as the old name. Nothing to do.')
+        return
+    end
+    if (player.hotbar[old_key] == nil) then
+        windower.add_to_chat(123, '[XIVCrossbar] No crossbar set named "' .. old_name .. '" found in the current job.')
+        return
+    end
+    if (player.hotbar[new_key] ~= nil) then
+        windower.add_to_chat(123, '[XIVCrossbar] A crossbar set named "' .. new_name .. '" already exists.')
+        return
+    end
+
+    -- Move the env dict to the new key and update its display name field.
+    local env = player.hotbar[old_key]
+    env.name = new_name
+    player.hotbar[new_key] = env
+    player.hotbar[old_key] = nil
+
+    -- If the renamed env was active, repoint the pointer.
+    if (player.hotbar_settings.active_environment == old_key) then
+        player.hotbar_settings.active_environment = new_key
+    end
+
+    -- Warn about orphaned switch-type bindings that still reference the
+    -- old name — those will not be auto-rewritten.
+    local orphan_count = count_switch_references(old_key)
+
+    player:save_hotbar()
+    reload_hotbar()
+
+    windower.add_to_chat(123, '[XIVCrossbar] Crossbar set renamed: "' .. old_name .. '" -> "' .. new_name .. '".')
+    if (orphan_count > 0) then
+        windower.add_to_chat(123, '[XIVCrossbar] Warning: ' .. orphan_count .. ' Quick XB Switch slot(s) still reference the old name and will no longer work until updated.')
+    end
+end
+
+-- Delete an existing crossbar set (environment) in the currently-loaded
+-- job. Removes the entire env including all of its slot bindings, falls
+-- the active-environment pointer back to a safe default if necessary, and
+-- warns about any switch-type slots that still reference the deleted name.
+-- There is NO going back, which is why you have to type the whole thing, 
+-- no aliases to avoid mistakes.
+function delete_environment_command(args)
+    if (not args[1]) then
+        windower.add_to_chat(123, '[XIVCrossbar] Usage: //xcb deleteset <name>')
+        return
+    end
+
+    -- Allow multi-word names by joining argv.
+    local target_name = table.concat(args, ' ')
+    local target_key = kebab_casify(target_name)
+
+    if (PROTECTED_ENV_KEYS[target_key]) then
+        windower.add_to_chat(123, '[XIVCrossbar] Crossbar set "' .. target_name .. '" is reserved and cannot be deleted.')
+        return
+    end
+    if (player.hotbar[target_key] == nil) then
+        windower.add_to_chat(123, '[XIVCrossbar] No crossbar set named "' .. target_name .. '" found in the current job.')
+        return
+    end
+
+    -- Drop the env (and all its slot bindings) entirely.
+    player.hotbar[target_key] = nil
+
+    -- If the deleted env was active, switch to a safe fallback computed
+    -- by env_chooser (same path as the addon's normal startup recovery).
+    if (player.hotbar_settings.active_environment == target_key) then
+        local fallback = env_chooser:get_default_active_environment(player.hotbar)
+        set_active_environment(fallback)
+    end
+
+    -- Warn about orphaned switch-type bindings before saving so the count
+    -- reflects the state seen by the user up to this moment.
+    local orphan_count = count_switch_references(target_key)
+
+    player:save_hotbar()
+    reload_hotbar()
+
+    windower.add_to_chat(123, '[XIVCrossbar] Crossbar set deleted: "' .. target_name .. '" (and all its slot bindings).')
+    if (orphan_count > 0) then
+        windower.add_to_chat(123, '[XIVCrossbar] Warning: ' .. orphan_count .. ' Quick XB Switch slot(s) referenced the deleted set and will no longer work.')
+    end
 end
 
 -- command to rerun the setup dialog
@@ -485,18 +760,34 @@ function display_help_menu()
         buttons = 'Face'
     end
 
-    windower.send_command('echo ================XIVCrossbar Help===============')
-    windower.send_command('echo To create a new crossbar set, use the command:')
-    windower.send_command('echo xb new <crossbar name>')
-    windower.send_command('echo ===============================================')
-    windower.send_command('echo To rerun the setup utility, use the command:')
-    windower.send_command('echo xb remap')
-    windower.send_command('echo ===============================================')
-    windower.send_command('echo Gamepad Controls (' .. theme_options.button_layout .. '):')
-    windower.send_command('echo ' .. plus_button .. ' + D-Pad (↑/↓): Switch between crossbar sets')
+    windower.send_command('echo ================ XIVCrossbar Help ================')
+    windower.send_command('echo Command prefix: //xivcrossbar  -or-  //xb  -or-  //xcb')
+    windower.send_command('echo --- Crossbar set management ---')
+    windower.send_command('echo new <name>                      Create a new crossbar set')
+    windower.send_command('echo rename <old> <new>              Rename an existing set (rn)')
+    windower.send_command('echo deleteset <name>                Delete a set and all its bindings')
+    windower.send_command('echo --- Slot binding management ---')
+    windower.send_command('echo set <env> <hb> <slot> ...       Bind an action to a slot')
+    windower.send_command('echo clear <env> <hb> <slot>         Clear (remove) a slot binding')
+    windower.send_command('echo cp/copy <env> <hb> <slot> <dest hb> <dest slot>')
+    windower.send_command('echo mv/move <env> <hb> <slot> <dest hb> <dest slot>')
+    windower.send_command('echo icon/ic <env> <hb> <slot> <icon>')
+    windower.send_command('echo alias/al/caption <env> <hb> <slot> <text>   Set slot caption')
+    windower.send_command('echo --- Custom Actions ---')
+    windower.send_command('echo ca/custom <a|n|c> <value>       Set field while a CA flow is active')
+    windower.send_command('echo --- Other ---')
+    windower.send_command('echo remap                           Rerun the gamepad setup utility')
+    windower.send_command('echo regenerate                      Regenerate cached resource files')
+    windower.send_command('echo reload                          Reload the active hotbar')
+    windower.send_command('echo help / ?                        Show this help')
+    windower.send_command('echo ================ Identifiers ================')
+    windower.send_command('echo Hotbar (<hb>):  l, r, rl, lr, ll, rr   (or 1-6)')
+    windower.send_command('echo Slot   (<slot>): ll, ld, lr, lu, rl, rd, rr, ru   (or 1-8)')
+    windower.send_command('echo ================ Gamepad (' .. theme_options.button_layout .. ') ================')
+    windower.send_command('echo ' .. plus_button .. ' + D-Pad (up/down): Switch between crossbar sets')
     windower.send_command('echo ' .. minus_button .. ': Open/close button bind utility')
-    windower.send_command('echo ' .. left_trigger .. '/' .. right_trigger .. ' Triggers + D-Pad: Navigate button bind utility (when open)')
-    windower.send_command('echo ' .. left_trigger .. '/' .. right_trigger .. ' Triggers + D-Pad or ' .. buttons .. ' Button: executes bound action')
+    windower.send_command('echo ' .. left_trigger .. '/' .. right_trigger .. ' + D-Pad: Navigate button bind utility (when open)')
+    windower.send_command('echo ' .. left_trigger .. '/' .. right_trigger .. ' + D-Pad or ' .. buttons .. ' Button: Execute bound action')
     windower.send_command('echo ===============================================')
 end
 
@@ -568,16 +859,30 @@ windower.register_event('addon command', function(command, ...)
         switch_crossbars_command(args)
     elseif command == 'set' then
         set_action_command(args)
-    elseif command == 'del' or command == 'delete' then
+    elseif command == 'clear' then
+        -- Renamed from "del" because you're just clearing the slot.
+        -- And to avoid confusion with "deleteset" because of its
+        -- destructive nature.
         delete_action_command(args)
+    elseif command == 'deleteset' then
+        -- Spelled out fully (no short alias) to avoid accidental triggering.
+        -- This removes the whole crossbar set including every slot binding
+        -- it contains.
+        delete_environment_command(args)
+    elseif command == 'rn' or command == 'rename' then
+        rename_environment_command(args)
     elseif command == 'cp' or command == 'copy' then
         copy_action_command(args, false)
     elseif command == 'mv' or command == 'move' then
         copy_action_command(args, true)
     elseif command == 'ic' or command == 'icon' then
         update_icon_command(args)
-    elseif command == 'al' or command == 'alias' or command == 'ca' or command == 'caption' then
+    elseif command == 'al' or command == 'alias' or command == 'caption' then
         update_alias_command(args)
+    elseif command == 'ca' or command == 'custom' then
+        -- Custom Action field-set: Only used when creating/editing
+        -- a custom action. Basically, when the action binder instructs you.
+        custom_action_field_command(args)
     elseif command == 'n' or command == 'new' then
         new_environment_command(args)
     elseif command == 'remap' then
@@ -601,6 +906,16 @@ local keys = {
     [10] = '9',
     [11] = '0',
     [12] = '-',
+    [13] = '=',
+    [26] = '[',
+    [27] = ']',
+    [39] = ';',
+    [40] = '\'',
+    [41] = '`',
+    [43] = '\\',
+    [51] = ',',
+    [52] = '.',
+    [53] = '/',
     [30] = 'A',
     [48] = 'B',
     [46] = 'C',
@@ -912,6 +1227,10 @@ end)
 
 -- ON ACTIONS (filtered to Job Abilities)
 windower.register_event('action', function(actor_id, category)
+    -- Skip while initialize() hasn't run yet (e.g. addon loaded before
+    -- the player is logged in). The login event will set ready=true once
+    -- a character has been selected.
+    if (not xivcrossbar.ready) then return end
     if (actor_id == player:get_id() and category == 6) then -- category 6 = Job Ability
         player:update_current_spells()
     end
@@ -919,23 +1238,27 @@ end)
 
 -- EVERY VANA'DIEL MINUTE
 windower.register_event('time change', function(actor_id, category)
+    if (not xivcrossbar.ready) then return end
     player:update_current_spells()
 end)
 
 -- ON MP CHANGE
 windower.register_event('mp change', function(new, old)
+    if (not xivcrossbar.ready) then return end
     player.vitals.mp = new
     ui:check_vitals(player.hotbar, player.vitals, player.hotbar_settings.active_environment)
 end)
 
 -- ON TP CHANGE
 windower.register_event('tp change', function(new, old)
+    if (not xivcrossbar.ready) then return end
     player.vitals.tp = new
     ui:check_vitals(player.hotbar, player.vitals, player.hotbar_settings.active_environment)
 end)
 
 -- ON STATUS CHANGE
 windower.register_event('status change', function(new_status_id)
+    if (not xivcrossbar.ready) then return end
     -- hide/show bar in cutscenes
     if xivcrossbar.hide_hotbars == false and new_status_id == 4 then
         xivcrossbar.hide_hotbars = true
@@ -956,17 +1279,50 @@ windower.register_event('status change', function(new_status_id)
         player:set_is_in_battle(false)
     --     set_battle_environment(false)
     end
+
+    -- Auto-attack swing timer: show bar only while engaged.
+    aa_set_engaged(new_status_id == 1 or new_status_id == 3)
+end)
+
+-- Auto-attack swing timer: pause/unpause when disabling debuffs come and go.
+-- Buff IDs: 2=Sleep, 6=Petrification, 10=Stun, 17=Terror, 19=Sleep II, 28=Charm.
+local AA_PAUSING_BUFFS = {
+    [2]  = 'sleep',
+    [6]  = 'petrify',
+    [10] = 'stun',
+    [17] = 'terror',
+    [19] = 'sleep2',
+    [28] = 'charm',
+}
+
+windower.register_event('gain buff', function(buff_id)
+    local src = AA_PAUSING_BUFFS[buff_id]
+    if (src ~= nil) then
+        aa_add_pause_source(src)
+    end
+end)
+
+windower.register_event('lose buff', function(buff_id)
+    local src = AA_PAUSING_BUFFS[buff_id]
+    if (src ~= nil) then
+        aa_remove_pause_source(src)
+    end
 end)
 
 -- ON JOB CHANGE
 windower.register_event('job change',function(main_job, main_job_level, sub_job, sub_job_level)
+    -- skillchains has its own internal state and is fine pre-init, so it
+    -- runs unconditionally. Everything below it depends on initialize().
     skillchains.job_change(main_job, main_job_level)
+    if (not xivcrossbar.ready) then return end
     player:update_jobs(resources.jobs[main_job].ens, resources.jobs[sub_job].ens)
     local default_active_environment = env_chooser:get_default_active_environment(player.hotbar)
     player:set_active_environment(default_active_environment)
     reload_hotbar()
 end)
 
+local CATEGORY_MELEE = 1
+local CATEGORY_WEAPONSKILL = 3
 local CATEGORY_COMPLETED_SPELL = 4
 local CATEGORY_JOB_ABILITY = 6
 local SUMMONING_MAGIC = 38
@@ -979,17 +1335,51 @@ local ADDENDUM_BLACK = 235
 local no_pet_environment = nil
 
 windower.register_event('action', function(act)
+    if (not xivcrossbar.ready) then return end
     -- Don't swap crossbars when someone *else* summons or uses Light/Dark Arts
     local windower_player = windower.ffxi.get_player()
     if (act.actor_id ~= windower_player.id) then
         return
     end
 
+    if (act.category == CATEGORY_MELEE and act.actor_id == player.id) then
+        aa_record_swing()
+    end
+
+    if (act.category == CATEGORY_WEAPONSKILL and act.actor_id == player.id) then
+        aa_add_pause_source('ws')
+        aa_clear_pause_after('ws', 2.0)
+    end
+    if (act.category == CATEGORY_JOB_ABILITY and act.actor_id == player.id) then
+        aa_add_pause_source('ja')
+        aa_clear_pause_after('ja', 2.0)
+    end
+
+    if (act.category == CATEGORY_JOB_ABILITY and act.actor_id == player.id) then
+        gcd_start_time = os.clock()
+        gcd_duration = 2.0
+        gcd_kind = 'ja'
+        gcd_active = true
+    end
+
     if (act.category == CATEGORY_COMPLETED_SPELL) then
         local spell = resources.spells[act.param]
+        if act.actor_id == player.id then
+            gcd_start_time = os.clock()
+            gcd_duration = theme_options.spell_lockout_duration or 3.0
+            gcd_kind = 'spell'
+            gcd_active = true
+        end
         if (spell ~= nil and spell.skill == SUMMONING_MAGIC and is_valid_environment(spell.en:gsub(' ', ''):lower())) then
             no_pet_environment = player.hotbar_settings.active_environment
             set_active_environment(spell.en:gsub(' ', ''):lower())
+        end
+    elseif (act.category == CATEGORY_WEAPONSKILL) then
+        if act.actor_id == player.id then
+            gcd_start_time = os.clock()
+            gcd_duration = 2.0
+            gcd_kind = 'ws'
+            gcd_active = true
         end
     elseif (act.category == CATEGORY_JOB_ABILITY and act.param == RELEASE) then
         if (no_pet_environment ~= nil and is_valid_environment(no_pet_environment)) then

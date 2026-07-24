@@ -74,20 +74,20 @@ If WinActive("ahk_class FFXiClass") {
 
 ; Helper subroutines. *DON'T* modify these to remap, instead just change which buttons call them
 SendConfirmKey() {
-  WinActivate "Aeliya"
+  WinActivate "Cindervale"
   SendInput "{Enter}"
 }
 SendCancelKey() {
-  WinActivate "Aeliya"
+  WinActivate "Cindervale"
   SendInput "{Esc}"
 }
 SendMainMenuKey() {
-  WinActivate "Aeliya"
+  WinActivate "Cindervale"
   SendInput "{NumpadSub}"
 
 }
 SendActiveWindowKey() {
-  WinActivate "Aeliya"
+  WinActivate "Cindervale"
   SendInput "{NumpadAdd}"
 }
 

@@ -556,24 +556,33 @@ function xml.realize(node, indentlevel)
 end
 
 -- Make an XML representation of a table.
+-- Keys are serialized in sorted order for deterministic, human-readable output.
 function table.to_xml(t, indentlevel)
     indentlevel = indentlevel or 0
     local indent = (' '):rep(4*indentlevel)
 
+    local keys = {}
+    for k in pairs(t) do
+        keys[#keys + 1] = k
+    end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+
     local str = ''
-    for key, val in pairs(t) do
-        if type(key) == 'number' then
-            key = 'node'
+    for _, key in ipairs(keys) do
+        local val = t[key]
+        local out_key = key
+        if type(out_key) == 'number' then
+            out_key = 'node'
         end
         if type(val) == 'table' and next(val) then
-            str = str..indent..'<'..key..'>\n'
+            str = str..indent..'<'..out_key..'>\n'
             str = str..table.to_xml(val, indentlevel + 1)..'\n'
-            str = str..indent..'</'..key..'>\n'
+            str = str..indent..'</'..out_key..'>\n'
         else
             if type(val) == 'table' then
                 val = ''
             end
-            str = str..indent..'<'..key..'>'..val:xml_escape()..'</'..key..'>\n'
+            str = str..indent..'<'..out_key..'>'..val:xml_escape()..'</'..out_key..'>\n'
         end
     end
 

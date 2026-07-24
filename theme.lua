@@ -1,31 +1,3 @@
---[[
-        Copyright © 2017, SirEdeonX
-        All rights reserved.
-
-        Redistribution and use in source and binary forms, with or without
-        modification, are permitted provided that the following conditions are met:
-
-            * Redistributions of source code must retain the above copyright
-              notice, this list of conditions and the following disclaimer.
-            * Redistributions in binary form must reproduce the above copyright
-              notice, this list of conditions and the following disclaimer in the
-              documentation and/or other materials provided with the distribution.
-            * Neither the name of xivhotbar nor the
-              names of its contributors may be used to endorse or promote products
-              derived from this software without specific prior written permission.
-
-        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-        ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-        WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-        DISCLAIMED. IN NO EVENT SHALL SirEdeonX BE LIABLE FOR ANY
-        DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-        (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-        ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-        SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-]]
-
 local theme = {}
 
 theme.apply = function (settings)
@@ -37,6 +9,11 @@ theme.apply = function (settings)
     options.AutoCreateXML = settings.AutoCreateXML
     options.UseAltLayout = settings.UseAltLayout
     options.AutoHideExtraBars = settings.AutoHideExtraBars
+    if settings.UseSharedSet == nil then
+        options.UseSharedSet = true
+    else
+        options.UseSharedSet = settings.UseSharedSet
+    end
 
     options.skillchain_window_opacity = settings.SkillchainIndicator.Opacity
     options.skillchain_waiting_color_red = settings.SkillchainIndicator.WindowWaitingColor.Red
@@ -45,6 +22,43 @@ theme.apply = function (settings)
     options.skillchain_open_color_red = settings.SkillchainIndicator.WindowOpenColor.Red
     options.skillchain_open_color_green = settings.SkillchainIndicator.WindowOpenColor.Green
     options.skillchain_open_color_blue = settings.SkillchainIndicator.WindowOpenColor.Blue
+
+    -- Spell lockout (post-cast; default 3.0s, configurable)
+    options.spell_lockout_duration = settings.SpellLockoutIndicator.Duration
+    options.spell_lockout_opacity = settings.SpellLockoutIndicator.Opacity
+    options.spell_lockout_primary_red = settings.SpellLockoutIndicator.PrimaryColor.Red
+    options.spell_lockout_primary_green = settings.SpellLockoutIndicator.PrimaryColor.Green
+    options.spell_lockout_primary_blue = settings.SpellLockoutIndicator.PrimaryColor.Blue
+    options.spell_lockout_ending_red = settings.SpellLockoutIndicator.EndingFlashColor.Red
+    options.spell_lockout_ending_green = settings.SpellLockoutIndicator.EndingFlashColor.Green
+    options.spell_lockout_ending_blue = settings.SpellLockoutIndicator.EndingFlashColor.Blue
+
+    -- Weapon Skill lockout (post-WS 2.0s)
+    options.ws_lockout_opacity = settings.WeaponskillLockoutIndicator.Opacity
+    options.ws_lockout_primary_red = settings.WeaponskillLockoutIndicator.PrimaryColor.Red
+    options.ws_lockout_primary_green = settings.WeaponskillLockoutIndicator.PrimaryColor.Green
+    options.ws_lockout_primary_blue = settings.WeaponskillLockoutIndicator.PrimaryColor.Blue
+
+    -- Job Ability lockout (post-JA 2.0s, two phases)
+    options.ja_lockout_opacity = settings.JobAbilityLockoutIndicator.Opacity
+    options.ja_lockout_full_red = settings.JobAbilityLockoutIndicator.FullLockoutColor.Red
+    options.ja_lockout_full_green = settings.JobAbilityLockoutIndicator.FullLockoutColor.Green
+    options.ja_lockout_full_blue = settings.JobAbilityLockoutIndicator.FullLockoutColor.Blue
+    options.ja_lockout_partial_red = settings.JobAbilityLockoutIndicator.PartialLockoutColor.Red
+    options.ja_lockout_partial_green = settings.JobAbilityLockoutIndicator.PartialLockoutColor.Green
+    options.ja_lockout_partial_blue = settings.JobAbilityLockoutIndicator.PartialLockoutColor.Blue
+
+    -- Auto-attack swing timer
+    options.aa_opacity = settings.AutoAttackIndicator.Opacity
+    options.aa_paused_opacity = settings.AutoAttackIndicator.PausedOpacity
+    options.aa_background_opacity = settings.AutoAttackIndicator.BackgroundOpacity
+    options.aa_paused_background_opacity = settings.AutoAttackIndicator.PausedBackgroundOpacity
+    options.aa_before_red = settings.AutoAttackIndicator.BeforeEstimateColor.Red
+    options.aa_before_green = settings.AutoAttackIndicator.BeforeEstimateColor.Green
+    options.aa_before_blue = settings.AutoAttackIndicator.BeforeEstimateColor.Blue
+    options.aa_past_red = settings.AutoAttackIndicator.PastEstimateColor.Red
+    options.aa_past_green = settings.AutoAttackIndicator.PastEstimateColor.Green
+    options.aa_past_blue = settings.AutoAttackIndicator.PastEstimateColor.Blue
 
     options.iconpack = settings.iconpack
     options.is_compact = settings.iscompact
@@ -67,6 +81,12 @@ theme.apply = function (settings)
     options.hotbar_spacing = settings.Style.HotbarSpacing
     options.offset_x = settings.Style.OffsetX
     options.offset_y = settings.Style.OffsetY
+
+    -- Per-hotbar offsets (alternate-press and double-press pairs)
+    options.alternate_press_offset_x = settings.HotbarOffsets.AlternatePress.X
+    options.alternate_press_offset_y = settings.HotbarOffsets.AlternatePress.Y
+    options.double_press_offset_x = settings.HotbarOffsets.DoublePress.X
+    options.double_press_offset_y = settings.HotbarOffsets.DoublePress.Y
 
     options.feedback_max_opacity = settings.Color.Feedback.Opacity
     options.feedback_speed = settings.Color.Feedback.Speed

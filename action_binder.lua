@@ -110,7 +110,7 @@ local maybe_get_custom_icon = function(default_icon, custom_icon, category, elem
             else
                 return default_icon, false
             end
-        elseif string.contains(category, "blood_pact") and element ~= nil then
+        elseif category~= nil and string.contains(category, "blood_pact") and element ~= nil then
             local fallback_found, fallback_icon_path = get_spirit_by_element(icon_path, element)
             
             if not fallback_found then
@@ -294,13 +294,12 @@ local action_targets = {
     ['SELECT_ALLIANCE'] = 'stal'
 }
 
--- TODO: Check if this (a) works (b) is even necessary
 local SPELL_TYPE_LOOKUP = {
     ['BardSong'] = 'songs',
-    ['BlackMagic'] = 'spells',
+    ['BlackMagic'] = 'black magic',
     ['BlueMagic'] = 'blue magic',
-    ['WhiteMagic'] = 'spells',
-    ['SummonerPact'] = 'avatars',
+    ['WhiteMagic'] = 'white magic',
+    ['SummonerPact'] = 'summoning magic',
 	['Geomancy'] = 'geomancy',
 }
 
@@ -870,6 +869,7 @@ function action_binder:submit_selected_option()
                 self.action_alias = option.data.alias
             end
 
+            -- TODO: Didn't know there was a print() function. It's much more readable, so switch all other uses of windower.add_to_chat()?
             print("Allow stpc for self: " .. tostring(self.theme_options.allow_stpc_for_self_targeted_actions))
             if (self.target_type['Self'] and not (self.theme_options.allow_stpc_for_self_targeted_actions or
                     self.target_type['NPC'] or

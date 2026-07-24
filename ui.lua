@@ -62,6 +62,121 @@ ui.disabled_slots.on_warmup = {}
 local animation_frame_count = 0
 
 ui.is_setup = false
+
+-----------------------------
+-- Buff caching
+-----------------------------
+
+-- Track WS relevant buffs
+-- Check if Immanence / Azure Lore / Chain Affinity / Burst Affinity is active and if any runes are active that could be bursted with Swipe / Lunge
+
+-- For better readability
+local ACTION_IDS = {
+    swipe = 344,
+    lunge = 368,
+}
+
+local BUFF_BY_ID = {
+    [163] = "azure_lore",
+    [164] = "chain_affinity",
+    [165] = "burst_affinity",
+    [470] = "immanence",
+}
+
+local RUNE_BY_ID = {
+    [523] = "ignis",
+    [524] = "gelus",
+    [525] = "flabra",
+    [526] = "tellus",
+    [527] = "sulpor",
+    [528] = "unda",
+    [529] = "lux",
+    [530] = "tenebrae"
+}
+
+-- TODO: find a better way of doing this? (after the switch to Teal)
+local RUNE_SKILL_INDEX = {
+    ignis = 1,
+    gelus = 2,
+    flabra = 3,
+    tellus = 4,
+    sulpor = 5,
+    unda = 6,
+    lux = 7,
+    tenebrae = 8,
+}
+
+local buff_active = {
+    azure_lore = false,
+    chain_affinity = false,
+    burst_affinity = false,
+    immanence = false,
+}
+
+local rune_active = {
+    ignis = false,
+    gelus = false,
+    flabra = false,
+    tellus = false,
+    sulpor = false,
+    unda = false,
+    lux = false,
+    tenebrae = false,
+}
+
+local last_active_rune = nil
+
+-- Updates the Buff cache for a single given Buff ID
+-- gained: boolean, true if the buff was gained, false if it was lost
+local function update_buff_cache(buff_id, is_gained)
+    local buff_name = BUFF_BY_ID[buff_id]
+
+    if buff_name then
+        buff_active[buff_name] = is_gained
+        return
+    end
+
+    local rune_name = RUNE_BY_ID[buff_id]
+
+    if rune_name then
+        rune_active[rune_name] = is_gained
+
+        if is_gained then
+            last_active_rune = RUNE_SKILL_INDEX[rune_name]
+        end
+    end
+end
+
+-- Caches all buffs that are relevant for UI display
+-- It only needs to be called once on first UI setup
+-- Afterwards, Windower events for "gain buff" and "lose buff" update future changes
+local function register_active_buffs()
+	-- clear cache
+    for key, _value in pairs(buff_active) do
+        buff_active[key] = false
+    end
+
+    for key, _value in pairs(rune_active) do
+        rune_active[key] = false
+    end
+
+    last_active_rune = nil
+
+    local buffs = windower.ffxi.get_player().buffs
+
+	for _key, buff in pairs(buffs) do
+		update_buff_cache(buff, true)
+	end
+end
+
+windower.register_event("gain buff", function(buff_id)
+	update_buff_cache(buff_id, true)
+end)
+
+windower.register_event('lose buff', function(buff_id)
+	update_buff_cache(buff_id, false)
+end)
+
 -----------------------------
 -- Helpers
 -----------------------------
@@ -232,6 +347,8 @@ end
 
 -- setup ui
 function ui:setup(theme_options, enchanted_items)
+    register_active_buffs()
+
     self.enchanted_items = enchanted_items
 
     icon_pack = theme_options.iconpack
@@ -1404,6 +1521,7 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                     local spell_requires_ja = false
 
                     local skillchain_prop = nil
+                    local property_type = nil
 
                     -- Honor linked_type / linked_action for metadata lookup.
                     -- action.action still drives the ninja-tool / COR-gun
@@ -1454,15 +1572,61 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                                     end
                                 end
                             end
+
+                            -- If it is Blue Magic, check if Azure Lore / Chain Affinity / Burst Affinity is active
+                            -- and if the spell is Skillchain / Magic Burst eligible
+                            if crossbar_action.category == "blue magic" then
+                                if buff_active["chain_affinity"] and not buff_active["burst_affinity"] then
+                                    skillchain_prop, property_type = skillchains.get_skillchain_result(crossbar_action.id, 'blue_chain_spells')
+                                elseif not buff_active["chain_affinity"] and buff_active["burst_affinity"] then
+                                    skillchain_prop, property_type = skillchains.get_skillchain_result(crossbar_action.id, 'blue_burst_spells')
+                                elseif (buff_active["chain_affinity"] and buff_active["burst_affinity"]) or buff_active["azure_lore"] then
+                                    -- Those will never override each other. A single blue magic spell is always either chain or burst eligible
+                                    local property_1, property_type_1 = skillchains.get_skillchain_result(crossbar_action.id, 'blue_chain_spells')
+                                    local property_2, property_type_2 = skillchains.get_skillchain_result(crossbar_action.id, 'blue_burst_spells')
+
+                                    if property_1 then
+                                        skillchain_prop = property_1
+                                        property_type = property_type_1
+                                    elseif property_2 then
+                                        skillchain_prop = property_2
+                                        property_type = property_type_2
+                                    end
+                                end
+                            -- If it's not Blue Magic, look for Magic Burst properties. If Immanence is active, look for Skillchain properties instead
+                            else
+                                if buff_active["immanence"] then
+                                    skillchain_prop, property_type = skillchains.get_skillchain_result(crossbar_action.id, 'immanence_spells')
+                                else
+                                    skillchain_prop, property_type = skillchains.get_skillchain_result(crossbar_action.id, 'spells')
+                                end
+                            end
                         end
                     elseif (lookup_type == 'ja' or lookup_type == 'ws' or lookup_type == 'pet') then
                         crossbar_action = crossbar_abilities[kebab_casify(lookup_name)]
                         if (crossbar_action ~= nil) then
                             if (lookup_type == 'ws') then
-                                skillchain_prop = skillchains.get_skillchain_result(crossbar_action.id, 'weapon_skills')
-
+                                skillchain_prop, property_type = skillchains.get_skillchain_result(crossbar_action.id, 'weapon_skills')
                             elseif (lookup_type == 'ja' or lookup_type == 'pet') then
-                                skillchain_prop = skillchains.get_skillchain_result(crossbar_action.recast_id, 'job_abilities')
+                                -- Check if Swipe / Lunge are able to Magic Burst
+                                if crossbar_action.id == ACTION_IDS["swipe"] then
+                                    if last_active_rune then
+                                        skillchain_prop, property_type = skillchains.get_skillchain_result(last_active_rune, 'runes')
+                                    end
+                                elseif crossbar_action.id == ACTION_IDS["lunge"] then
+                                    -- Iterate over all active runes to see if one of them is able to Magic Burst.
+                                    -- As soon as one is found, break the loop. There is no need to check the others as the UI display is always the same.
+                                    for rune_name, is_active in pairs(rune_active) do
+                                        if is_active then
+                                            skillchain_prop, property_type = skillchains.get_skillchain_result(RUNE_SKILL_INDEX[rune_name], 'runes')
+                                            if skillchain_prop then
+                                                break
+                                            end
+                                        end
+                                    end
+                                else
+                                    skillchain_prop, property_type = skillchains.get_skillchain_result(crossbar_action.id, 'job_abilities')
+                                end
 
                                 if (player.main_job == 'COR' or player.sub_job == 'COR') then
                                     local tool_info = consumables:get_ability_info_by_name(kebab_casify(action.action))
@@ -1685,7 +1849,10 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                             frame_step = 2
                         end
 
-                        if (player_vitals.tp >= 1000) then
+                        if (property_type == "burst") then
+							self.hotbars[h].slot_warmup[i]:alpha(255)
+                            self.hotbars[h].slot_frame[i]:alpha(255)
+						elseif ((player_vitals.tp >= 1000) and (property_type == "skillchain")) then
                             self.hotbars[h].slot_warmup[i]:alpha(255)
                             self.hotbars[h].slot_frame[i]:alpha(255)
                             self.hotbars[h].slot_icon[i]:hide()
@@ -1698,17 +1865,20 @@ function ui:check_recasts(player_hotbar, player_vitals, environment, spells, gam
                         end
 
                         self.hotbars[h].slot_frame[i]:path(windower.addon_path .. '/images/' .. get_icon_pathbase() .. '/ui/frame_step' .. frame_step .. '.png')
-                        self.hotbars[h].slot_warmup[i]:path(windower.addon_path..'/images/' .. get_icon_pathbase() .. '/skillchain/' .. skillchain_prop:lower() .. '.png')
-                        self.hotbars[h].slot_warmup[i]:size(40, 40)
-                        self.hotbars[h].slot_warmup[i]:pos(self:get_slot_x(h, i), self:get_slot_y(h, i))
-                        self.hotbars[h].slot_warmup[i]:show()
-                        self.hotbars[h].slot_warmup[i]:show()
-                        self.hotbars[h].slot_icon[i]:hide()
+
+                        if (property_type == "skillchain") then
+                            self.hotbars[h].slot_warmup[i]:path(windower.addon_path..'/images/' .. get_icon_pathbase() .. '/skillchain/' .. skillchain_prop:lower() .. '.png')
+                            self.hotbars[h].slot_warmup[i]:size(40, 40)
+                            self.hotbars[h].slot_warmup[i]:pos(self:get_slot_x(h, i), self:get_slot_y(h, i))
+                            self.hotbars[h].slot_warmup[i]:show()
+                            self.hotbars[h].slot_warmup[i]:show()
+                            self.hotbars[h].slot_icon[i]:hide()
+                        end
                     elseif (not in_warmup) then
                         self.hotbars[h].slot_frame[i]:path(self.frame_image_path)
                         self.hotbars[h].slot_icon[i]:show()
                         self.hotbars[h].slot_warmup[i]:hide()
-                        if (action.type == 'ws' or action.linked_type == 'ws') then
+                        if (action.type == 'ws' or action.linked_type == 'ws' or action.type == "ma" or action.linked_type == "ma") then
                             self.hotbars[h].slot_cost[i]:show()
                         end
                     end

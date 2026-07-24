@@ -723,6 +723,7 @@ function player:dispatch_action(action)
         abil_name_lc = abil_name_lc:gsub("%s+","") -- TODO: removes whitespace, is there a more readable way of doing this, e.g. "trim" or something? If not, make a helper library for this.
 
 		for hb,_ in pairs(self.hotbar) do
+            -- TODO: Change this so that it is case insensitive
 			if abil_name_lc == hb:lower() or abil_name_lc:startswith(hb:lower()) then
 				env = hb
 				break
@@ -733,7 +734,8 @@ function player:dispatch_action(action)
 			set_active_environment(env)
 		end
 	elseif action.type == 'pet' and action.action:capitalize() == "Release" then -- go back to basic if release is used.
-		set_active_environment("basic")
+		-- TODO: Implement a fallback in case a player has no basic hotbar
+        set_active_environment("basic")
 	end
 
     -- switch to set defined in job_abilities (without spaces)

@@ -389,6 +389,8 @@ Reserved set names (cannot be renamed or deleted): `default`, `job-default`, `al
 
 9. If you want extra clusters in a given set, you can set `hotbar_number` in the settings to 4 or 6. Setting to 4 will enable the clusters by holding both triggers one after the other (R>L = 3, or RL, L>R = 4, or LR). Setting to 6 will also enable the clusters triggered by double-tapping a trigger (L twice = 5, or LL, R twice = 6, or RR).
 
+TODO: Make this better: The setting is in data/settings.xml under `<Hotbar><Number>6</Number></Hotbar>`. Also, setting `AutoHideExtraBars` to `true` is mandatory when enabling the double tap bars.
+
 ---
 
 ## Notes

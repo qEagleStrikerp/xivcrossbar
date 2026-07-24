@@ -70,7 +70,7 @@ function build_module()
         Fragmentation = {'Wind','Lightning', Fusion={3,'Light'}, Distortion={2,'Distortion'}, lvl=2},
         Distortion = {'Ice','Water', Gravitation={3,'Darkness'}, Fusion={2,'Fusion'}, lvl=2},
         Fusion = {'Fire','Light', Fragmentation={3,'Light'}, Gravitation={2,'Gravitation'}, lvl=2},
-        Compression = {'Darkness', Transfixion={1,'Transfixion'}, Detonation={1,'Detonation'}, lvl=1},
+        Compression = {'Dark', Transfixion={1,'Transfixion'}, Detonation={1,'Detonation'}, lvl=1},
         Liquefaction = {'Fire', Impaction={2,'Fusion'}, Scission={1,'Scission'}, lvl=1},
         Induration = {'Ice', Reverberation={2,'Fragmentation'}, Compression={1,'Compression'}, Impaction={1,'Impaction'}, lvl=1},
         Reverberation = {'Water', Induration={1,'Induration'}, Impaction={1,'Impaction'}, lvl=1},
@@ -80,6 +80,28 @@ function build_module()
         Impaction = {'Lightning', Liquefaction={1,'Liquefaction'}, Detonation={1,'Detonation'}, lvl=1},
     }
 
+    -- Info about what elements resonate with a given skillchain
+	local sc_elements = {
+		Radiance = {Fire=true,Wind=true,Lightning=true,Light=true},
+        Umbra = {Earth=true,Ice=true,Water=true,Dark=true},
+        Light = {Fire=true,Wind=true,Lightning=true,Light=true},
+        Darkness = {Earth=true,Ice=true,Water=true,Dark=true},
+        Gravitation = {Earth=true,Dark=true},
+        Fragmentation = {Wind=true,Lightning=true},
+        Distortion = {Ice=true,Water=true},
+        Fusion = {Fire=true,Light=true},
+        Compression = {Dark=true},
+        Liquefaction = {Fire=true},
+        Induration = {Ice=true},
+        Reverberation = {Water=true},
+        Transfixion = {Light=true},
+        Scission = {Earth=true},
+        Detonation = {Wind=true},
+        Impaction = {Lightning=true},
+	}
+
+    -- TODO: These don't match https://www.bg-wiki.com/ffxi/Chainbound_(Status)
+    -- Is there something that needs to be udpated? If not, update this comment and explain the difference.
     local chainbound = {}
     chainbound[1] = L{'Compression','Liquefaction','Induration','Reverberation','Scission'}
     chainbound[2] = L{'Gravitation','Fragmentation','Distortion'} + chainbound[1]
@@ -92,7 +114,8 @@ function build_module()
         return ability.skillchain
     end
 
-    function check_props(old, new)
+    -- Checks for Skillchain properties
+    function check_sc_props(old, new)
         for k = 1, #old do
             local first = old[k]
             local combo = sc_info[first]
@@ -109,8 +132,25 @@ function build_module()
         end
     end
 
+    -- Checks for Magic Burst properties
+	function check_burst_props(old, new)
+        for k = 1, #old do
+            local first = old[k]
+            local combo = sc_elements[first]
+            for i = 1, #new do
+                local second = new[i]
+                local result = combo[second]
+                if result then
+					return result
+				end
+            end
+        end
+    end
+
+    -- TODO: Rename this to better reflect that it returns either a Skillchain or Magic Burst property
     myself.get_skillchain_result = function(id, resource)
         local result = nil
+        local propertyType = nil
 
         if (skills[resource] ~= nil and skills[resource][id] ~= nil) then
             local ability = skills[resource][id]
@@ -120,23 +160,40 @@ function build_module()
             targ_id = targ and targ.id
 
             local reson = resonating[targ_id]
-            local timer = reson and (reson.times - now) or 0
 
-            if (targ and targ.hpp > 0 and timer > 0 and now >= reson.delay) then
-                if (not reson.closed) then
-                    local lv, prop, aeonic = check_props(reson.active, ability.skillchain)
+            if not reson then
+                return result
+            end
+
+            local sc_timer = reson.times - now
+            local mb_timer = reson.mb_window - now
+
+            if (targ and targ.hpp > 0 and not reson.closed) then
+                -- if the action has a Magic Burst property, check if it can burst
+                if ability["element"] ~= nil and mb_timer > 0 and reson.step > 1 then
+                    local prop = check_burst_props(reson.active, ability.element)
                     if prop then
+                        result = prop
+                        propertyType = "burst"
+                    end
+                -- if the action has a Skillchain property, check if it can form a Skillchain
+                elseif ability["skillchain"] ~= nil and sc_timer > 0 and now >= reson.delay then
+                    local lv, prop, aeonic = check_sc_props(reson.active, ability.skillchain)
+                    if prop then
+                        -- TODO: This looks like it doesn't work since AM is not defined anywhere.
+                        -- This is probably a leftover from cutting out part of the original addon.
+                        -- Fix this.
                         result = AM and aeonic or prop
+                        propertyType = "skillchain"
                     end
                 end
             end
         end
 
-        return result
+        return result, propertyType
     end
 
     myself.get_skillchain_window = function()
-
         local now = os.clock()
         local targ = windower.ffxi.get_mob_by_target('t', 'bt')
         targ_id = targ and targ.id
@@ -169,7 +226,7 @@ function build_module()
         next_frame = now + 0.1
 
         for k, v in pairs(resonating) do
-            if v.times - now + 10 < 0 then
+            if v.mb_window - now + 10 < 0 then
                 resonating[k] = nil
             end
         end
@@ -229,6 +286,7 @@ function build_module()
             active=properties,
             delay=clock+delay,
             times=clock+delay+8-step,
+            mb_window=clock+10,
             step=step,
             closed=closed,
             bound=bound
@@ -263,7 +321,7 @@ function build_module()
             local step = (reson and reson.step or 1) + 1
 
             if level == 3 and reson and ability then
-                level = check_props(reson.active, aeonic_prop(ability, actor))
+                level = check_sc_props(reson.active, aeonic_prop(ability, actor))
             end
 
             local closed = step > 5 or level == 4

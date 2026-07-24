@@ -2,6 +2,60 @@
 
 # TODO 2: Tell players to add new images by looking up root/resources/ and placeing files into root\images\icons\iconpacks\default\ and to please share them via pull request
 
+# Icydeath
+
+Note by Eagle: I undid the changes to MountRoulette so that it's still built in. You presumably don't need the MountRoulette Addon. But test this!
+
+Below is what I've done so far. At the bottom of the post is a link to the download.
+
+Some notes before using.
+If you already use the addon make a backup of your config.ini, ffxi_directinput.ahk, and ffxi_xinput.ahk files. So you can copy them back over and not have to reconfig your controller.
+
+Remember to enable the 'Run' plugin via the windower launcher. The plugin enables the addon to automatically start the AHK scripts when it loads.
+
+I recommend backing up your xivcrossbar/data folder incase something goes wrong
+
+
+The changes...
+ffxi_directinput.ahk - fixed an issue with targeting when in a party. (may need to be done with ffxi_xinput.ahk as well? See my previous post.)
+
+New ahk folder that has directinput scripts for logitech F710, flight pad pro and ps5
+
+killahk.bat to kill the AHK scripts.
+
+Removed resources folder, addon now uses windowers resource data.
+
+Removed mountroulette library, you should just enable the MountRoulette addon via the windower launcher
+
+Lots more icons added for abilities and spells.
+
+Fixed multiple issues with pet commands, job abilities, etc.
+
+Added automatic crossbars switching for SMN. If there is a crossbar that is the same name as the avatar being casted it will automatically switch to that crossbar.
+When you use the Release command it will automatically switch back to the default crossbar.
+
+
+New settings --> xivcrossbar/data/settings.xml
+use_directinput [true/false] (default: true) set to false if your controller isn't direct input
+
+use_xinput [true/false] (default: true) set to false if your controller isn't x-input
+
+enable_superwarp_all [true/false] (default: false) set to true to enable the all command when creating warp macros.
+
+on_unload_killahk [true/false] (default: false) set to true if you want to terminate the ahk scripts when the addon is unloaded. Only works if you are using the 'Run' plugin.
+
+
+GUI system changes
+Added ability to add an "Execute Command" (ex) placeholder and select its icon.
+
+images/icons/iconpack/default/GENERATE_ICON_LIST.bat - Run this batch file if you added new icons and you want to use them when creating a "Execute Command" via the GUI system.
+
+Added Superwarp macro creation. The screen allows you to pick either Survival guide or Home point areas.
+
+
+Even though there is a lot more I want to do (refactoring and features), I thought this would be a good time to share the changes I've made with the OP.
+I would like to avoid two different versions being managed in Github if possible.
+
 # FionaBrightgrass:
  
 # XIVCrossBarUpdate  

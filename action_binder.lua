@@ -1,4 +1,5 @@
 require("lists")
+require("strings")
 require("tables")
 
 local mount_roulette = require('libs/mountroulette/mountroulette')
@@ -14,19 +15,118 @@ local action_binder = {}
 local theme = require('theme')
 local theme_options = theme.apply(settings)
 local icon_pack = nil
+local sw_zones = require('sw_zones')
+
+local WYVERN_ABILITIES_TO_FILTER = {
+        ['1151'] = true,
+        ['1152'] = true,
+        ['1153'] = true,
+        ['1154'] = true,
+        ['1155'] = true,
+        ['1156'] = true,
+        ['1157'] = true,
+        ['1158'] = true,
+        ['1159'] = true,
+        ['1160'] = true,
+        ['1161'] = true,
+        ['1162'] = true,
+        ['1163'] = true,
+        ['1164'] = true,
+        ['1165'] = true,
+        ['1166'] = true
+    }
 
 local get_icon_pathbase = function()
     return 'icons/iconpacks/' .. icon_pack
 end
 
-local maybe_get_custom_icon = function(default_icon, custom_icon)
+-- Assumes a kebab_casify'd string
+-- TODO: Test if this works properly
+-- TODO: Rewrite this to be more readable (and maybe also works for non-kebab_casify'd strings)
+local get_base_spell_for_higher_level_spells = function(icon_path)
+	if not icon_path then
+        return ""
+    end
+
+    local suffixes = {
+        II = true,
+        III = true,
+        IV = true,
+        V = true,
+        VI = true,
+        VII = true,
+    }
+
+    -- Extract the last "-" separated part
+    local suffix = icon_path:match("([^%-]+)$")
+
+    -- If it's one of the higher spell level Roman numerals, remove it and the preceding "-"
+    if suffix and suffixes[suffix:upper()] then
+        return icon_path:gsub("%-[^%-]+$", "")
+    end
+
+    return icon_path
+end
+
+-- TODO: Test if this works properly
+-- TODO: Rewrite this to be more readable
+function get_spirit_by_element(icon_path, element_name)
+    local elements = res.elements
+
+    for _key, entry in pairs(res.spells) do
+        if entry.type == 'SummonerPact' and entry.en:contains('Spirit') then
+            if entry.element == elements:with('en', element_name).id then
+                local new_icon_path = icon_path:gsub("([^/]+)%.png$", string.format("%05d", entry.id) .. ".png")
+                return true, new_icon_path
+            end
+        end
+    end
+
+    return false, nil
+end
+
+-- TODO: The references to this function currently don't fill "category", it's always nil. So update the references.
+-- TODO: Are there other cases where a non-spell might be named "something-ii" or similar? In that case, expand the guard for those cases.
+-- TODO: Maybe split this into sub-versions, like maybe_get_custom_icon_default, maybe_get_custom_icon_bloodpact etc.
+-- That would also get rid of category and element for the default version
+local maybe_get_custom_icon = function(default_icon, custom_icon, category, element)
     local pathbase = get_icon_pathbase()
     local icon_path = 'images/' .. pathbase .. '/' .. custom_icon
     local icon_file = file.new(icon_path)
+
     if (icon_file:exists()) then
         return icon_path, true
     else
-        return default_icon, false
+        -- TODO: Remove the redundancy
+        -- TODO: Check if the fallback actually works if only e.g. curing-waltz.png is available,
+        -- but not curing-waltz-iii
+        -- TODO: Also check if the fallback maybe is already implemented elsewhere to avoid doing a redundant fallback check
+        if category == "spell" then
+            local fallback_icon_path = get_base_spell_for_higher_level_spells(icon_path)
+            local fallback_icon_file = file.new(fallback_icon_path)
+            
+            if (fallback_icon_file:exists()) then
+                return fallback_icon_path, true
+            else
+                return default_icon, false
+            end
+        elseif string.contains(category, "blood_pact") and element ~= nil then
+            local fallback_found, fallback_icon_path = get_spirit_by_element(icon_path, element)
+            
+            if not fallback_found then
+                return default_icon, false
+            end
+            
+            local fallback_icon_file = file.new(fallback_icon_path)
+            
+            if (fallback_icon_file:exists()) then
+                return fallback_icon_path, true
+            else
+                return default_icon, false
+            end
+        else
+            return default_icon, false
+        end
     end
 end
 
@@ -113,6 +213,8 @@ local action_types = {
     ['QUICK_SWITCH_CROSSBARS'] = 40,
     ['GS_MACRO'] = 41,
     ['CREATE_NEW_SET'] = 42,
+	['EXECUTE_COMMAND'] = 43,
+	['SUPERWARP'] = 44,
 }
 
 local prefix_lookup = {
@@ -157,6 +259,8 @@ local prefix_lookup = {
     [action_types.QUICK_SWITCH_CROSSBARS] = 'switch', -- temp-switch to another set; auto-reverts after one action
     [action_types.GS_MACRO] = 'gs',
     [action_types.CREATE_NEW_SET] = 'ex',
+	[action_types.EXECUTE_COMMAND] = 'ex',
+	[action_types.SUPERWARP] = 'ex',
 }
 
 -- Reverse-display lookup for stored linked_type prefixes. Used by the Edit
@@ -190,12 +294,14 @@ local action_targets = {
     ['SELECT_ALLIANCE'] = 'stal'
 }
 
+-- TODO: Check if this (a) works (b) is even necessary
 local SPELL_TYPE_LOOKUP = {
     ['BardSong'] = 'songs',
-    ['BlackMagic'] = 'black magic',
+    ['BlackMagic'] = 'spells',
     ['BlueMagic'] = 'blue magic',
-    ['WhiteMagic'] = 'white magic',
-    ['SummonerPact'] = 'summoning magic',
+    ['WhiteMagic'] = 'spells',
+    ['SummonerPact'] = 'avatars',
+	['Geomancy'] = 'geomancy',
 }
 
 function action_binder:setup(buttonmapping, save_binding_func, delete_binding_func, theme_options, get_crossbar_sets_func, base_x, base_y, max_width, max_height,
@@ -775,6 +881,10 @@ function action_binder:submit_selected_option()
                 self.state = states.SELECT_BUTTON_ASSIGNMENT
                 self:display_button_assigner()
             elseif (self.target_type['None']) then
+                if self.action_type == action_types.EXECUTE_COMMAND or self.action_type == action_types.SUPERWARP then
+					self.icon = option.icon
+				end
+
                 self.action_target = nil
                 self.state = states.SELECT_BUTTON_ASSIGNMENT
                 self:display_button_assigner()
@@ -1348,6 +1458,8 @@ function action_binder:display_action_type_selector()
     action_type_list:append({id = action_types.SWITCH_TARGET, name = 'Switch Target', icon = 'images/' ..get_icon_pathbase() .. '/targetnpc.png'})
     action_type_list:append({id = action_types.MAP, name = 'View Map', icon = 'images/' ..get_icon_pathbase() .. '/map.png'})
     action_type_list:append({id = action_types.LAST_SYNTH, name = 'Repeat Last Synth', icon = 'images/' ..get_icon_pathbase() .. '/synth.png'})
+    action_type_list:append({id = action_types.EXECUTE_COMMAND, name = 'Execute Command', icon = get_icon_pathbase() .. '/windower4.png'})
+	action_type_list:append({id = action_types.SUPERWARP, name = 'Superwarp', icon = 'credit_avatars/akadentk.png'})
     action_type_list:append({id = action_types.SWITCH_CROSSBARS, name = 'Switch Crossbars', icon = 'images/' ..get_icon_pathbase() .. '/ui/facebuttons_ps.png'})
     action_type_list:append({id = action_types.QUICK_SWITCH_CROSSBARS, name = 'Quick XB Switch', icon = 'images/' ..get_icon_pathbase() .. '/ui/facebuttons_ps.png'})
     action_type_list:append({id = action_types.CREATE_NEW_SET, name = 'Create New Set', icon = 'images/' ..get_icon_pathbase() .. '/ui/dpad_' .. self.button_layout .. '.png'})
@@ -1423,6 +1535,10 @@ function action_binder:display_action_selector()
         self:display_crossbar_sets_selector()
     elseif (self.action_type == action_types.CUSTOM_ACTION) then
         self:display_custom_actions_selector()
+    elseif (self.action_type == action_types.EXECUTE_COMMAND) then
+        self:display_execute_command_selector()
+	elseif (self.action_type == action_types.SUPERWARP) then
+        self:display_superwarp_selector()
     end
 end
 
@@ -1869,7 +1985,7 @@ function action_binder:display_ability_selector()
 
     for key, id in pairs(abilities) do
         local recast_id = res.job_abilities[id].recast_id
-        local name = res.job_abilities[id].name
+        local name = res.job_abilities[id].en
         local target_type = res.job_abilities[id].targets
         local ability = crossbar_abilities[kebab_casify(name)]
         if (not skip_categories[ability.category]) then
@@ -1899,7 +2015,7 @@ function action_binder:display_weaponskill_selector()
     for key, id in pairs(abilities) do
         local ws = res.weapon_skills[id]
         local weapon = res.skills[ws.skill].en:lower()
-        local name = ws.name
+        local name = ws.en
         local ws_action = crossbar_abilities[kebab_casify(name)]
         local icon_path, icon_overridden = maybe_get_custom_icon(ws_action.default_icon, ws_action.custom_icon)
         local icon_offset = 4
@@ -1916,6 +2032,8 @@ function action_binder:display_weaponskill_selector()
     self:show_control_hints('Confirm', 'Go Back')
 end
 
+-- TODO: Add get_drg_pet_commands(mlvl, slvl)
+-- TODO This ↑ comment is by Icydeath. Maybe this has already been implemented? → Test it.
 function action_binder:display_pet_command_selector()
     self.title:text('Select Pet Command')
     self.title:show()
@@ -1991,6 +2109,8 @@ function action_binder:display_magic_selector_internal(magic_type)
 
         if (spell ~= nil and spell.category == magic_filter_type) then
             local icon_path, icon_overridden = maybe_get_custom_icon(spell.default_icon, spell.custom_icon)
+            
+            -- TODO: This is duplicated a lot, remove the redundancy
             local icon_offset = 4
             if (icon_overridden) then
                 icon_offset = 0
@@ -2077,31 +2197,14 @@ function action_binder:display_bp_rage_selector()
     self.title:text('Select Blood Pact: Rage')
     self.title:show()
 
-    local WYVERN_ABILITIES_TO_FILTER = {
-        ['1151'] = true,
-        ['1152'] = true,
-        ['1153'] = true,
-        ['1154'] = true,
-        ['1155'] = true,
-        ['1156'] = true,
-        ['1157'] = true,
-        ['1158'] = true,
-        ['1159'] = true,
-        ['1160'] = true,
-        ['1161'] = true,
-        ['1162'] = true,
-        ['1163'] = true,
-        ['1164'] = true,
-        ['1165'] = true,
-        ['1166'] = true
-    }
-
     local ability_list = L{}
 
     for id, ability in pairs(res.job_abilities) do
         local name = ability.name
         local target_type = ability.targets
         local blood_pact = crossbar_abilities[kebab_casify(name)]
+
+        -- TODO: Change this to Set:contains() for better readability
         if (blood_pact.category == 'blood-pacts/rage' and WYVERN_ABILITIES_TO_FILTER[blood_pact.id] == nil) then
             local icon_path, icon_overridden = maybe_get_custom_icon(blood_pact.default_icon, blood_pact.custom_icon)
             local icon_offset = 4
@@ -2128,9 +2231,11 @@ function action_binder:display_bp_ward_selector()
     for id, ability in pairs(res.job_abilities) do
         local name = ability.name
         local target_type = ability.targets
-
         local blood_pact = crossbar_abilities[kebab_casify(name)]
-        if (blood_pact.category == 'blood-pacts/ward') then
+
+        -- TODO: Icydeath had the WYVERN_ABILITIES_TO_FILTER on both BP Rage and BP Ward, but Aliekber only on Ward. Which is correct?
+        -- TODO: Change this to Set:contains() for better readability
+        if (blood_pact.category == 'blood-pacts/ward' and WYVERN_ABILITIES_TO_FILTER[blood_pact.id] == nil) then
             local icon_path, icon_overridden = maybe_get_custom_icon(blood_pact.default_icon, blood_pact.custom_icon)
             local icon_offset = 4
             if (icon_overridden) then
@@ -3049,6 +3154,22 @@ function action_binder:display_tradable_item_selector()
     self:show_control_hints('Confirm', 'Go Back')
 end
 
+function action_binder:display_execute_command_selector()
+    self.title:text('Select an icon for the command')
+    self.title:show()
+
+    self.selector:display_options(get_icons())
+    self:show_control_hints('Confirm', 'Go Back')
+end
+
+function action_binder:display_superwarp_selector()
+    self.title:text('Select Warp Location')
+    self.title:show()
+
+    self.selector:display_options(get_warp_zones())
+    self:show_control_hints('Confirm', 'Go Back')
+end
+
 function action_binder:display_player_selector(include_self)
     self.title:text('Select Player to Assist')
     self.title:show()
@@ -3483,8 +3604,6 @@ function get_drg_pet_commands(job_id, job_level)
 end
 
 function get_stratagems(job_id, job_level)
-    local all_abilities = res.job_abilities
-
     local grimoire_white = get_icon_pathbase() .. '/abilities/book_white.png'
     local grimoire_black = get_icon_pathbase() .. '/abilities/book_black.png'
 
@@ -3524,8 +3643,6 @@ function get_stratagems(job_id, job_level)
 end
 
 function get_dances(job_id, job_level)
-    local all_abilities = res.job_abilities
-
     local dances = L{
         {name = 'Drain Samba', id = 184, level = 5},
         {name = 'Drain Samba II', id = 185, level = 35},
@@ -3586,8 +3703,6 @@ function get_dances(job_id, job_level)
 end
 
 function get_wards(job_id, job_level)
-    local all_abilities = res.job_abilities
-
     local wards = L{
         {name = 'Vallation', id = 366, level = 10},
         {name = 'Pflug', id = 369, level = 40},
@@ -3623,8 +3738,6 @@ function get_wards(job_id, job_level)
 end
 
 function get_effusions(job_id, job_level)
-    local all_abilities = res.job_abilities
-
     local effusions = L{
         {name = 'Swipe', id = 344, level = 25},
         {name = 'Lunge', id = 368, level = 25},
@@ -3658,65 +3771,30 @@ function get_effusions(job_id, job_level)
     return effusion_list
 end
 
+-- TODO: Do we really need FAKE_ID? The same is used for every mount, so that's not really useful
+-- Find a better solution.
+-- TODO: Check if this still works after the rewrite
 function get_mounts()
     local allowed_mounts = mount_roulette:get_allowed_mounts()
-
     local FAKE_ID = 0
-
     mount_list = L{}
 
-    local mount_names = {
-        ['chocobo'] = "Chocobo",
-        ['raptor'] = "Raptor",
-        ['tiger'] = "Tiger",
-        ['crab'] = "Crab",
-        ['red crab'] = "Red Crab",
-        ['bomb'] = "Bomb",
-        ['sheep'] = "Sheep",
-        ['morbol'] = "Morbol",
-        ['crawler'] = "Crawler",
-        ['fenrir'] = "Fenrir",
-        ['beetle'] = "Beetle",
-        ['moogle'] = "Moogle",
-        ['magic pot'] = "Magic Pot",
-        ['tulfaire'] = "Tulfaire",
-        ['warmachine'] = "Warmachine",
-        ['xzomit'] = "Xzomit",
-        ['hippogryph'] = "Hippogryph",
-        ['spectral chair'] = "Spectral Chair",
-        ['spheroid'] = "Spheroid",
-        ['omega'] = "Omega",
-        ['coeurl'] = "Coeurl",
-        ['goobbue'] = "Goobbue",
-        ['raaz'] = "Raaz",
-        ['levitus'] = "Levitus",
-        ['adamantoise'] = "Adamantoise",
-        ['dhalmel'] = "Dhalmel",
-        ['doll'] = "Doll",
-        ['noble chocobo'] = "Noble Chocobo",
-        ['wivre'] = "Wivre",
-        ['iron giant'] = "Iron Giant",
-        ['golden bomb'] = "Golden Bomb",
-        ['mount roulette'] = "Mount Roulette"
-    }
-
+    -- Set up the mount list
     local target_type = {['None'] = true}
     for i, mount_name in ipairs(allowed_mounts) do
-        if (mount_names[mount_name] ~= nil) then
-            local default_icon = 'images/' .. get_icon_pathbase() .. '/mount.png'
-            local custom_icon = 'mounts/' .. kebab_casify(mount_name) .. '.png'
-            local icon_path = maybe_get_custom_icon(default_icon, custom_icon)
-            mount_list:append({id = FAKE_ID, name = mount_names[mount_name], icon = icon_path, data = {target_type = target_type}})
-        end
+        local default_icon = 'images/' .. get_icon_pathbase() .. '/mount.png'
+        local custom_icon = 'mounts/' .. kebab_casify(mount_name) .. '.png'
+        local icon_path = maybe_get_custom_icon(default_icon, custom_icon)
+        mount_list:append({id = FAKE_ID, name = string.capitalize(mount_name), icon = icon_path, data = {target_type = target_type}})
     end
 
     mount_list:sort(sortByName)
 
-    local mount_name = 'mount roulette'
+    -- Add the mount roulette option
     local default_icon = 'images/' .. get_icon_pathbase() .. '/mount.png'
     local custom_icon = 'mounts/mount-roulette.png'
     local icon_path = maybe_get_custom_icon(default_icon, custom_icon)
-    mount_list:append({id = FAKE_ID, name = mount_names[mount_name], icon = icon_path, data = {target_type = target_type}})
+    mount_list:append({id = FAKE_ID, name = "Mount Roulette", icon = icon_path, data = {target_type = target_type}})
 
     return mount_list
 end
@@ -3833,6 +3911,68 @@ end
 
 function get_tradable_items()
     return get_items('General')
+end
+
+function get_icons() -- Used for EXECUTE_COMMAND action type
+	local lognotice = false
+	local command_list = L{}
+	
+	local txt_file = file.new('images/' .. get_icon_pathbase() .. '/icon_list.txt')
+	if txt_file:exists() then
+		local FAKE_ID = 0
+		local icon_offset = 0
+		local target_type = {['None'] = true}
+		
+		local icon_list = txt_file:readlines()
+		for key,line in pairs(icon_list) do
+			if not tonumber(line) and line ~= nil and line ~= '' and not line:contains('home-point') and not line:contains('survival-guide') then
+				local icon_name = tostring(line):gsub('.png',''):gsub('\\','/')
+				local icon_path = get_icon_pathbase()..'/'..icon_name..'.png'
+				local icon_file = file.new('images/'..icon_path)
+				if icon_file:exists() then
+					command_list:append({id = FAKE_ID, name = icon_name, icon = icon_path, icon_offset = icon_offset, data = {target_type = target_type}})
+				elseif not shownotice then
+					lognotice = true
+				end
+			end
+		end
+	else
+		error('FILE NOT FOUND "icon_list.txt". Please run "images/'..get_icon_pathbase()..'/GENERATE_ICON_LIST.bat"')
+	end
+	
+	if lognotice then
+		warning('Some icons not found. Resolve by running "images/'..get_icon_pathbase()..'/GENERATE_ICON_LIST.bat"')
+	end
+	
+	command_list:sort(sortByName)
+	
+	return command_list
+end
+
+function get_warp_zones() -- For creating superwarp macros
+	local command_list = L{}
+	local FAKE_ID = 0
+	local icon_offset = 0
+	local target_type = {['None'] = true}
+	
+	for key,entry in pairs(res.zones) do
+		if entry and entry.en ~= 'unknown' then
+			local name = entry.en
+			local icon_path
+			if sw_zones.hp[name] then
+				icon_path = maybe_get_custom_icon('', 'home point') --..'/home-point.png'
+				command_list:append({id = FAKE_ID, name = name, icon = icon_path, icon_offset = icon_offset, data = {target_type = target_type}})
+			end
+			if sw_zones.sg[name] then
+				icon_path = maybe_get_custom_icon('', 'survival guide') --..'/survival-guide.png'
+				command_list:append({id = FAKE_ID, name = name, icon = icon_path, icon_offset = icon_offset, data = {target_type = target_type}})
+			end
+		end
+	end
+	
+	command_list:sort(sortByName)
+	
+	return command_list
 end
 
 function fix_target_types(id, magic_type, targets)

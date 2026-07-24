@@ -182,6 +182,8 @@ local generate_crossbar_abilities = function()
             local category = kebab_casify(res.skills[ws.skill].en)
             local element = res.elements[ws.element].en
 
+            -- TODO: This call to kebab_casify is redundant
+            -- TODO: Check if this still works after I removed redundant images in the folder
             local custom_icon = 'weaponskills/' .. kebab_casify(category) .. '/' ..  key .. '.png'
             local default_icon = '/images/icons/weapons/' .. category .. '.png'
 

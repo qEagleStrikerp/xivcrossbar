@@ -4,6 +4,10 @@ defaults.buttonbackgroundalpha = 150
 defaults.iscompact = false
 
 defaults.iconpack = 'default'
+defaults.use_directinput = true
+defaults.use_xinput = true
+defaults.on_unload_killahk = false
+defaults.enable_superwarp_all = false
 
 defaults.FrameSkip = 0
 defaults.AllowSTPCForSelfTargetedActions = false

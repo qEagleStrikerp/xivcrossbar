@@ -1,7 +1,7 @@
 -- Addon description
 _addon.name = 'XIVCrossbar' -- based on Edeon's XIV Hotbar
 _addon.author = 'Aliekber, various friendly neighborhood modders'
--- Credit goes to: Aeliya, BlueSummersC, FionaBrightgrass, GrayFox2510, qEagleStrikerp, Sylvebits, XerevNonori
+-- Credit goes to: Aeliya, BlueSummersC, FionaBrightgrass, GrayFox2510, Icydeath, qEagleStrikerp, Sylvebits, XerevNonori
 _addon.version = '0.4.0'
 _addon.language = 'english'
 _addon.commands = {'xivcrossbar', 'xb', 'xcb'}
@@ -102,6 +102,16 @@ function set_hotkey(hotbar, slot, action_type, action, target, command, icon, li
             action = 'lastsynth'
             alias = 'Last Synth'
             icon = 'synth'
+        elseif (action_type == 'ex' and action == icon) then
+            alias = 'placeholder'
+        elseif (action_type == 'ex' and (icon == 'home-point' or icon == 'survival-guide')) then
+            alias = action
+            local all = theme_options.enable_superwarp_all and ' all' or ''
+            if (icon == 'home-point') then
+                action = 'sw hp'.. all ..' '..alias
+            else
+                action = 'sw sg'.. all ..' '..alias
+            end
         end
     end
 
@@ -241,10 +251,15 @@ function delete_custom_action(name)
     windower.add_to_chat(123, '[XIVCrossbar] Custom action deleted: "' .. name .. '". Existing slot bindings referencing it will not be auto-removed.')
 end
 
+-- TODO: DirectInput and Xinput AHKs should never run together. Make sure of that in some way.
 function start_controller_wrappers()
-    -- windower.send_command('run addons/xivcrossbar/ffxi_directinput.ahk')
-    -- windower.send_command('run addons/xivcrossbar/ffxi_input_diagnostic.ahk')
-    windower.send_command('run addons/xivcrossbar/ffxi_xinput.ahk')
+    if theme_options.use_directinput then
+		windower.send_command('run addons/xivcrossbar/ffxi_directinput.ahk')
+	end
+	
+	if theme_options.use_xinput then
+		windower.send_command('run addons/xivcrossbar/ffxi_xinput.ahk')
+	end
 end
 
 -- initialize addon
@@ -322,7 +337,7 @@ function set_battle_environment(in_battle)
     ui:load_player_hotbar(player.hotbar, player.vitals, player.hotbar_settings.active_environment, gamepad_state)
 end
 
--- set battle environment
+-- set active environment
 function set_active_environment(environment_name)
     player:set_active_environment(environment_name)
     ui:load_player_hotbar(player.hotbar, player.vitals, player.hotbar_settings.active_environment, gamepad_state)
@@ -850,10 +865,18 @@ windower.register_event('login',function()
 end)
 
 -- ON LOGOUT
+-- TODO: Add an option so that this only happens if the user wants it. I certainly don't.
 windower.register_event('logout', function()
     ui:hide()
     skillchains.logout()
     windower.send_command('lua u xivcrossbar')
+end)
+
+-- ON UNLOAD
+windower.register_event('unload',function()
+	if theme_options.on_unload_killahk then
+		windower.send_command('run addons/xivcrossbar/killahk.bat')
+	end
 end)
 
 -- ON COMMAND
@@ -894,6 +917,11 @@ windower.register_event('addon command', function(command, ...)
         custom_action_field_command(args)
     elseif command == 'n' or command == 'new' then
         new_environment_command(args)
+    elseif #args > 0 and command == 'sw' or command == 'switch' then
+		local to = table.concat(args, ' ')
+        if is_valid_environment(to) then
+			set_active_environment(args[1]:lower())
+		end
     elseif command == 'remap' then
         remap()
     elseif command == 'regenerate' then

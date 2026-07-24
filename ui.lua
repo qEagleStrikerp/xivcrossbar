@@ -673,7 +673,7 @@ function ui:load_player_hotbar(player_hotbar, player_vitals, environment, gamepa
 end
 
 function ui:should_show_element(element)
-    return element ~= nil and element ~= 'None' and self.theme.hide_action_element == false
+    return element ~= nil and element ~= 'None' and element ~= '0' and self.theme.hide_action_element == false
 end
 
 -- load action into a hotbar slot
@@ -718,10 +718,10 @@ function ui:load_action(player_hotbar, environment, hotbar, slot, action, player
     local lookup_type = action.linked_type or action.type
     local lookup_name = action.linked_action or action.action
 
-    -- if slot has a skill (ma, ja or ws) — or is linked to one
     if lookup_type == 'ma' or lookup_type == 'ja' or lookup_type == 'ws' or lookup_type == 'enchanteditem' or lookup_type == 'pet' then
         local crossbar_action = nil
 
+        -- if slot has a skill (ma, ja, pet or ws) — or is linked to one
         if (lookup_type == 'ma' or lookup_type == 'ja' or lookup_type == 'pet' or lookup_type == 'ws') then
             if (lookup_type == 'ma') then
                 crossbar_action = crossbar_spells[kebab_casify(lookup_name)]

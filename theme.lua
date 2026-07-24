@@ -23,6 +23,11 @@ theme.apply = function (settings)
     options.skillchain_open_color_green = settings.SkillchainIndicator.WindowOpenColor.Green
     options.skillchain_open_color_blue = settings.SkillchainIndicator.WindowOpenColor.Blue
 
+    options.use_directinput = settings.use_directinput
+	options.use_xinput = settings.use_xinput
+	options.on_unload_killahk = settings.on_unload_killahk
+	options.enable_superwarp_all = settings.enable_superwarp_all
+
     -- Spell lockout (post-cast; default 3.0s, configurable)
     options.spell_lockout_duration = settings.SpellLockoutIndicator.Duration
     options.spell_lockout_opacity = settings.SpellLockoutIndicator.Opacity

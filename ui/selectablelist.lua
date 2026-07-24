@@ -282,7 +282,19 @@ function selectable_list:display_options(options)
 
                 -- populate the "collision" map for dpad navigation
                 local field_col = self.field_coords[col] or {}
-                field_col[row] = {['id'] = option_id, ['text'] = option_caption, ['data'] = data}
+                if data and data.target_type['None'] then
+					if value.icon:contains('home-point') or value.icon:contains('survival-guide') then
+						local splat = value.icon:split('/')
+						local last = #splat
+						local icon_name = splat[last]
+						if icon_name then icon_name = icon_name:gsub('.png','') end
+						field_col[row] = {['id'] = option_id, ['text'] = option_caption, ['data'] = data, ['icon'] = icon_name}
+					else
+						field_col[row] = {['id'] = option_id, ['text'] = option_caption, ['data'] = data, ['icon'] = value.name}
+					end
+				else
+					field_col[row] = {['id'] = option_id, ['text'] = option_caption, ['data'] = data}
+				end
                 self.field_coords[col] = field_col
             end
         end

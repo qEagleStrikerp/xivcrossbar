@@ -47,6 +47,9 @@ function player:initialize(windower_player, server, theme_options, enchanted_ite
     storage:setup(self)
 end
 
+local avatar_names = S{'Shiva','Ramuh','Garuda','Leviathan','Diabolos','Titan','Fenrir','Ifrit','Carbuncle','Fire Spirit','Air Spirit','Ice Spirit','Thunder Spirit','Light Spirit','Dark Spirit','Earth Spirit','Water Spirit','Cait Sith','Alexander','Odin','Atomos','Siren'}
+local job_abilities = S{'Light Arts','Dark Arts'}
+
 local unescape = function(str)
     return str:gsub('&apos;', '\''):gsub('quote', '"')
 end
@@ -501,7 +504,7 @@ function player:set_active_environment(environment)
     self.hotbar_settings.active_environment = kebab_casify(environment)
 end
 
--- set bar environment
+-- is valid environment
 function player:is_valid_environment(environment)
     return self.hotbar[environment] ~= nil
 end
@@ -709,7 +712,48 @@ function player:dispatch_action(action)
         return
     end
 
+    -- run all other actions
     windower.send_command('input /' .. action.type .. ' "' .. action.action .. target_string)
+
+    -- switch to avatars bar if it exists
+    -- TODO: Check if this is redundant, Aliekber mentioned he wanted to implement this at some point
+	if action.type == 'ma' and avatar_names:contains(action.action:capitalize()) then
+		local env = nil
+		local abil_name_lc = action.action:lower()
+        abil_name_lc = abil_name_lc:gsub("%s+","") -- TODO: removes whitespace, is there a more readable way of doing this, e.g. "trim" or something? If not, make a helper library for this.
+
+		for hb,_ in pairs(self.hotbar) do
+			if abil_name_lc == hb:lower() or abil_name_lc:startswith(hb:lower()) then
+				env = hb
+				break
+			end
+		end
+		
+		if env ~= nil then
+			set_active_environment(env)
+		end
+	elseif action.type == 'pet' and action.action:capitalize() == "Release" then -- go back to basic if release is used.
+		set_active_environment("basic")
+	end
+
+    -- switch to set defined in job_abilities (without spaces)
+    -- TODO: This looks redundant to the bit above, they can probably be merged into one block.
+	if action.type == 'ja' and job_abilities:contains(action.action:capitalize()) then
+		local env = nil
+		local abil_name_lc = action.action:lower()
+		abil_name_lc = abil_name_lc:gsub("%s+","") -- TODO: removes whitespace, is there a more readable way of doing this, e.g. "trim" or something? If not, make a helper library for this.
+		
+        for hb,_ in pairs(self.hotbar) do
+			if abil_name_lc == hb:lower() or abil_name_lc:startswith(hb:lower()) then
+				env = hb
+				break
+			end
+		end
+		
+		if env ~= nil then
+			set_active_environment(env)
+		end
+	end
 end
 
 -- remove action from slot

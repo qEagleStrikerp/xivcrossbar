@@ -4,8 +4,9 @@ defaults.buttonbackgroundalpha = 150
 defaults.iscompact = false
 
 defaults.iconpack = 'default'
-defaults.use_directinput = true
-defaults.use_xinput = true
+defaults.use_directinput = false
+defaults.use_xinput = false
+defaults.on_logout_unload_addon = false
 defaults.on_unload_killahk = false
 defaults.enable_superwarp_all = false
 

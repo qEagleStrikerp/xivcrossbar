@@ -25,6 +25,7 @@ theme.apply = function (settings)
 
     options.use_directinput = settings.use_directinput
 	options.use_xinput = settings.use_xinput
+    options.on_logout_unload_addon = settings.on_logout_unload_addon
 	options.on_unload_killahk = settings.on_unload_killahk
 	options.enable_superwarp_all = settings.enable_superwarp_all
 

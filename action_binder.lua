@@ -2111,6 +2111,7 @@ function action_binder:display_magic_selector_internal(magic_type)
             local icon_path, icon_overridden = maybe_get_custom_icon(spell.default_icon, spell.custom_icon)
             
             -- TODO: This is duplicated a lot, remove the redundancy
+            -- Also, I noticed that this fails for regular icons if you logout and login again. Fix this as well.
             local icon_offset = 4
             if (icon_overridden) then
                 icon_offset = 0

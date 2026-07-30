@@ -870,11 +870,13 @@ windower.register_event('login',function()
 end)
 
 -- ON LOGOUT
--- TODO: Add an option so that this only happens if the user wants it. I certainly don't.
 windower.register_event('logout', function()
     ui:hide()
     skillchains.logout()
-    windower.send_command('lua u xivcrossbar')
+
+    if theme_options.on_logout_unload_addon then
+        windower.send_command('lua u xivcrossbar')
+    end
 end)
 
 -- ON UNLOAD

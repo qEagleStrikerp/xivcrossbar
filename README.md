@@ -1,6 +1,8 @@
 # TODO: Merge all the below content
 
-# TODO 2: Tell players to add new images by looking up root/resources/ and placeing files into root\images\icons\iconpacks\default\ and to please share them via pull request
+# TODO 2: Tell players to add new images by looking up root/resources/ and placeing files into root\images\icons\iconpacks\default\ and to please share them via pull request. Also, icons need to be 40 x 40!.
+
+# TODO 3: If you take another ahk script, you have to rename it. At least I haven't gotten it to work without renaming. Add that to notes.
 
 # Icydeath
 

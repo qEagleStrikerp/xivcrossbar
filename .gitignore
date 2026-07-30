@@ -3,5 +3,6 @@
 config.ini
 data/
 diagnostics/
+images/extracted_icons
 resources/
 Thumbs.db

@@ -60,6 +60,7 @@ local left_trigger_lifted_during_doublepress_window = false
 local right_trigger_lifted_during_doublepress_window = false
 local is_left_doublepress_window_open = false
 local is_right_doublepress_window_open = false
+local y_adjust = 450
 
 local function close_left_doublepress_window()
     is_left_doublepress_window_open = false
@@ -272,10 +273,14 @@ function initialize()
 
     if windower_player == nil then return end
 
+    if (settings.below1080) then
+        y_adjust = 250
+    end
+
     if (buttonmapping.validate()) then
         theme_options.button_layout = buttonmapping.button_layout
         action_binder:setup(buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300,
-            windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action, create_new_set)
+            windower.get_windower_settings().ui_y_res - y_adjust, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action, create_new_set)
     else
         theme_options.button_layout = 'nintendo'
         local temp_buttonmapping = {}
@@ -283,10 +288,10 @@ function initialize()
         theme_options.cancel_button = 'b'
         theme_options.mainmanu_button = 'y'
         theme_options.activewindow_button = 'x'
-        gamepad_mapper:setup(buttonmapping, start_controller_wrappers, theme_options, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450)
+        gamepad_mapper:setup(buttonmapping, start_controller_wrappers, theme_options, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - y_adjust)
         gamepad_mapper:show(true)
         action_binder:setup(temp_buttonmapping, set_hotkey, delete_hotkey, theme_options, get_crossbar_sets, 150, 150, windower.get_windower_settings().ui_x_res - 300,
-            windower.get_windower_settings().ui_y_res - 450, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action, create_new_set)
+            windower.get_windower_settings().ui_y_res - y_adjust, change_slot_icon, save_global_icon, save_custom_action, update_custom_action, delete_custom_action, create_new_set)
     end
 
     player:initialize(windower_player, server, theme_options, enchanted_items)
@@ -748,7 +753,7 @@ end
 
 -- command to rerun the setup dialog
 function remap()
-    gamepad_mapper:setup(buttonmapping, start_controller_wrappers, theme_options, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - 450)
+    gamepad_mapper:setup(buttonmapping, start_controller_wrappers, theme_options, 150, 150, windower.get_windower_settings().ui_x_res - 300, windower.get_windower_settings().ui_y_res - y_adjust)
     gamepad_mapper:show(false)
 end
 

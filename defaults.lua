@@ -137,4 +137,6 @@ defaults.Texts.Stroke.Red = 20
 defaults.Texts.Stroke.Green = 20
 defaults.Texts.Stroke.Blue = 20
 
+defaults.below1080 = false
+
 return defaults

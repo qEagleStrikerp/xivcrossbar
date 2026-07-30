@@ -45,9 +45,9 @@ def switchCharacters():
 	if nextWindowId != 1 and nextWindowId != FFXI_PROCESS_ID:
 		if trySwitchWindow("Final Fantasy XI", nextWindowId):
 			return
-	nextWindowId = getNamedProcess("Cindervale")
+	nextWindowId = getNamedProcess("YourCharacterNameHere")
 	if nextWindowId != 1 and nextWindowId != FFXI_PROCESS_ID:
-		if trySwitchWindow("Cindervale", nextWindowId):
+		if trySwitchWindow("YourCharacterNameHere", nextWindowId):
 			return
 	nextWindowId = getNamedProcess("Your2BoxCharacterNameHere")
 	if nextWindowId != 1 and nextWindowId != FFXI_PROCESS_ID:

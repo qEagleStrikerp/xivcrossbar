@@ -641,19 +641,19 @@ Loop {
 
 ; Helper subroutines. *DON'T* modify these to remap, instead just change which buttons call them
 SendConfirmKey:
-WinActivate, Cindervale
+WinActivate, YourCharacterNameHere
 SendInput {Enter}
 return
 SendCancelKey:
-WinActivate, Cindervale
+WinActivate, YourCharacterNameHere
 SendInput {Esc}
 return
 SendMainMenuKey:
-WinActivate, Cindervale
+WinActivate, YourCharacterNameHere
 SendInput {NumpadSub}
 return
 SendActiveWindowKey:
-WinActivate, Cindervale
+WinActivate, YourCharacterNameHere
 SendInput {NumpadAdd}
 return
 

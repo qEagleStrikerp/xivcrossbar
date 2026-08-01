@@ -5,7 +5,7 @@ defaults.iscompact = false
 
 defaults.iconpack = 'default'
 defaults.use_directinput = false
-defaults.use_xinput = false
+defaults.use_xinput = true
 defaults.on_logout_unload_addon = false
 defaults.on_unload_killahk = false
 defaults.enable_superwarp_all = false

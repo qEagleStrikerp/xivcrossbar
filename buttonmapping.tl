@@ -1,6 +1,38 @@
-local buttonmapping = {}
+local file = require('files')
 
-function buttonmapping:write()
+local enum ButtonLayout
+    "gamecube"
+    "nintendo"
+    "playstation"
+    "xbox"
+end
+
+local enum Button
+    "a"
+    "b"
+    "x"
+    "y"
+    "cross"
+    "circle"
+    "square"
+    "triangle"
+end
+
+local record ButtonMapping
+    button_layout: ButtonLayout
+    confirm_button: Button
+    cancel_button: Button
+    mainmenu_button: Button
+    activewindow_button: Button
+
+    read: function(self: ButtonMapping)
+    validate: function(self: ButtonMapping): boolean
+    write: function(self: ButtonMapping): boolean
+end
+
+local buttonmapping: ButtonMapping = {}
+
+function buttonmapping:write(): boolean
     windower.send_command('[XIVCrossbar] here')
     if (not self:validate()) then
         windower.send_command('[XIVCrossbar] here too')
@@ -34,24 +66,24 @@ function buttonmapping:read()
         local button_mappings_raw = input_file:read() .. '\n'
 
         for match in button_mappings_raw:lower():gmatch("buttonlayout=(.-)\n") do
-            buttonmapping.button_layout = match
+            buttonmapping.button_layout = match as ButtonLayout
         end
         for match in button_mappings_raw:lower():gmatch("confirmbutton=(.-)\n") do
-            buttonmapping.confirm_button = match
+            buttonmapping.confirm_button = match as Button
         end
         for match in button_mappings_raw:lower():gmatch("cancelbutton=(.-)\n") do
-            buttonmapping.cancel_button = match
+            buttonmapping.cancel_button = match as Button
         end
         for match in button_mappings_raw:lower():gmatch("mainmenubutton=(.-)\n") do
-            buttonmapping.mainmenu_button = match
+            buttonmapping.mainmenu_button = match as Button
         end
         for match in button_mappings_raw:lower():gmatch("activewindowbutton=(.-)\n") do
-            buttonmapping.activewindow_button = match
+            buttonmapping.activewindow_button = match as Button
         end
     end
 end
 
-function buttonmapping:validate()
+function buttonmapping:validate(): boolean
     local button_layout_correct = buttonmapping.button_layout == 'gamecube' or
         buttonmapping.button_layout == 'xbox' or
         buttonmapping.button_layout == 'playstation' or

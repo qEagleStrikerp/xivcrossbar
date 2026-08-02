@@ -1,4 +1,4 @@
-local file = require('files')
+local file = require("files")
 
 local enum ButtonLayout
     "gamecube"

@@ -28,29 +28,35 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -- _addon.version = '3.0.1'
 -- _addon.commands = {'mountroulette', 'mr'}
 
-require('lists')
-require('sets')
-resources = require('resources')
+require("lists")
+require("sets")
+local resources = require("resources")
+
+local record MountRoulette
+    get_allowed_mounts: function(self: MountRoulette): List<string>
+    ride_random_mount: function(self: MountRoulette)
+end
 
 math.randomseed(os.time())
 
-local mount_roulette = {}
+local mount_roulette: MountRoulette = {}
+local allowed_mounts: List<string> = L{}
+local possible_mounts: List<string> = L{}
 
-allowed_mounts = L{}
-possible_mounts = L{}
-for _, mount in pairs(resources.mounts) do
-    possible_mounts:append(mount.name:lower())
+for _id, mount in pairs(resources.mounts) do
+    possible_mounts:append(mount.en:lower())
 end
 
-function update_allowed_mounts()
-    local allowed_mounts_set = S{}
+local function update_allowed_mounts()
+    local allowed_mounts_set: Set<string> = S{}
     local kis = windower.ffxi.get_key_items()
 
-    for _, id in ipairs(kis) do
+    for _index, id in ipairs(kis) do
         local ki = resources.key_items[id]
-        if ki ~= nil and ki.category == 'Mounts' and ki.name ~= "trainer's whistle" then -- Don't care about the quest KI
-            local mount_index = possible_mounts:find(function(possible_mount)
-                return windower.wc_match(ki.name:lower(), '♪' .. possible_mount .. '*')
+        
+        if ki ~= nil and ki.category == "Mounts" and ki.en ~= "trainer's whistle" then -- Don't care about the quest KI
+            local mount_index = possible_mounts:find(function(possible_mount: string): boolean
+                return windower.wc_match(ki.en:lower(), '♪' .. possible_mount .. '*')
             end)
             local mount = possible_mounts[mount_index]
 
@@ -58,18 +64,18 @@ function update_allowed_mounts()
         end
     end
 
-    allowed_mounts = L(allowed_mounts_set)
+    allowed_mounts = L(allowed_mounts_set as {string})
 end
 
 update_allowed_mounts()
 
-windower.register_event('incoming chunk', function(id)
+windower.register_event("incoming chunk", function(id: integer)
     if id == 0x055 then --ki update
         update_allowed_mounts()
     end
 end)
 
-function mount_roulette:get_allowed_mounts()
+function mount_roulette:get_allowed_mounts(): List<string>
     return allowed_mounts
 end
 
@@ -77,9 +83,9 @@ function mount_roulette:ride_random_mount()
     local player = windower.ffxi.get_player()
 
     -- If the player is mounted, dismount now
-    for _, buff in pairs(player.buffs) do
+    for _index, buff in ipairs(player.buffs) do
         if buff == 252 then --mounted buff
-            windower.send_command('input /dismount')
+            windower.send_command("input /dismount")
             return
         end
     end
